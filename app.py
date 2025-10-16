@@ -1,7 +1,6 @@
 import os
 import sys
 
-
 # ===== CONFIGURACIÓN CRÍTICA PARA STREAMLIT CLOUD =====
 os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
 os.environ['STREAMLIT_CI'] = 'true'
@@ -522,10 +521,11 @@ def main():
                 
                 st.markdown("---")
                 
-                # Botón para extraer de Power BI
-                if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
-                    with st.spinner("🌐 Extrayendo datos de Power BI..."):
-                        valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
+                # EXTRACCIÓN AUTOMÁTICA: Sin botón, inicia directamente
+                st.info("🤖 **Extracción Automática Activada** - Conectando con Power BI...")
+                
+                with st.spinner("🌐 Extrayendo datos de Power BI..."):
+                    valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
                     
                     if valor_power_bi is not None and pasos_power_bi is not None:
                         # Mostrar resultados de Power BI
