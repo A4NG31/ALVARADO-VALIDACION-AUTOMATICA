@@ -343,7 +343,8 @@ def encontrar_y_seleccionar_fecha_exacta(driver, fecha_objetivo):
 
 def extraer_datos_power_bi(fecha_validacion):
     """
-    Extrae datos REALES del dashboard de Power BI después de aplicar el filtro de fecha
+    Extrae datos REALES del dashboard de Power BI para PEAJE ALVARADO
+    Basado en el código que funciona para otros peajes
     """
     driver = None
     try:
@@ -356,16 +357,16 @@ def extraer_datos_power_bi(fecha_validacion):
         
         st.info("🌐 Conectando con Power BI...")
         driver.get(power_bi_url)
-        time.sleep(15)  # Dar más tiempo para cargar inicialmente
+        time.sleep(15)
         
         # Seleccionar la fecha EXACTA
         st.info(f"📅 Seleccionando fecha: {fecha_validacion}")
         if not encontrar_y_seleccionar_fecha_exacta(driver, fecha_validacion):
             return None, None
         
-        # ESPERAR CRÍTICO: Esperar a que el filtro se aplique y los datos se actualicen
+        # ESPERAR a que el filtro se aplique
         st.info("⏳ Esperando a que se aplique el filtro de fecha...")
-        time.sleep(8)  # Esperar más tiempo para que los datos se actualicen
+        time.sleep(8)
         
         # Extraer datos REALES de "RESUMEN COMERCIOS" - PEAJE ALVARADO
         st.info("🔍 Extrayendo datos reales del resumen de comercios...")
@@ -374,179 +375,181 @@ def extraer_datos_power_bi(fecha_validacion):
         pasos_power_bi = None
         
         try:
-            # ESTRATEGIA MEJORADA: Buscar la tabla y extraer los valores actuales filtrados
-            st.info("🔍 Buscando tabla con datos filtrados...")
+            # ESTRATEGIA PROBADA: Buscar la tabla "RESUMEN COMERCIOS" como en el código que funciona
+            st.info("🔍 Buscando tabla 'RESUMEN COMERCIOS'...")
             
-            # Buscar el título RESUMEN COMERCIOS
+            # Buscar el título de la tabla
+            titulo_selectors = [
+                "//*[contains(text(), 'RESUMEN COMERCIOS')]",
+                "//*[contains(text(), 'Resumen Comercios')]",
+                "//*[contains(text(), 'RESUMEN') and contains(text(), 'COMERCIOS')]",
+            ]
+            
             titulo_element = None
-            max_intentos = 3
-            
-            for intento in range(max_intentos):
+            for selector in titulo_selectors:
                 try:
-                    selectors_titulo = [
-                        "//*[contains(text(), 'RESUMEN COMERCIOS')]",
-                        "//*[contains(text(), 'Resumen Comercios')]",
-                        "//*[contains(text(), 'COMERCIOS')]"
-                    ]
+                    elementos = driver.find_elements(By.XPATH, selector)
+                    for elemento in elementos:
+                        if elemento.is_displayed():
+                            titulo_element = elemento
+                            st.success("✅ Tabla 'RESUMEN COMERCIOS' encontrada")
+                            break
+                    if titulo_element:
+                        break
+                except:
+                    continue
+            
+            if not titulo_element:
+                st.error("❌ No se encontró la tabla 'RESUMEN COMERCIOS'")
+                return None, None
+            
+            # ESTRATEGIA CLAVE: Obtener el contenedor completo de la tabla
+            try:
+                # Buscar el contenedor principal de la tabla (como en el código que funciona)
+                container = titulo_element.find_element(By.XPATH, "./ancestor::div[position()<=5]")
+                
+                # Obtener TODO el texto del contenedor
+                container_text = container.text
+                st.info(f"📊 Texto completo del contenedor: {container_text[:500]}...")  # Mostrar primeros 500 chars
+                
+                # BUSCAR ESPECÍFICAMENTE PEAJE ALVARADO Y SUS DATOS
+                # El formato esperado es: PEAJE ALVARADO [Cant Pasos] [Cant Ajustes] [Valor a Pagar]
+                
+                # Patrón para encontrar PEAJE ALVARADO y sus datos
+                patron_alvarado = r'PEAJE ALVARADO\s+(\d{1,3}(?:\.\d{3})*|\d+)\s+(\d+)\s+([$\d\.,]+)'
+                match = re.search(patron_alvarado, container_text, re.IGNORECASE)
+                
+                if match:
+                    pasos_texto, ajustes_texto, valor_texto = match.groups()
                     
-                    for selector in selectors_titulo:
+                    # Procesar cantidad de pasos
+                    pasos_limpio = pasos_texto.replace('.', '').replace(',', '')
+                    if pasos_limpio.isdigit():
+                        pasos_power_bi = int(pasos_limpio)
+                        st.success(f"👣 Cantidad de pasos extraída: {pasos_power_bi}")
+                    
+                    # Procesar valor
+                    valor_limpio = valor_texto.replace('$', '').replace('.', '').replace(',', '').strip()
+                    if valor_limpio.isdigit():
+                        valor_power_bi = float(valor_limpio)
+                        st.success(f"💰 Valor extraído: ${valor_power_bi:,.0f}")
+                    
+                else:
+                    st.warning("⚠️ No se pudo extraer con patrón específico, intentando método alternativo...")
+                    
+                    # MÉTODO ALTERNATIVO: Búsqueda por posiciones
+                    # Buscar "PEAJE ALVARADO" en el texto
+                    idx_alvarado = container_text.upper().find('PEAJE ALVARADO')
+                    if idx_alvarado != -1:
+                        # Tomar el texto después de PEAJE ALVARADO
+                        texto_despues = container_text[idx_alvarado + len('PEAJE ALVARADO'):]
+                        
+                        # Buscar números en el texto siguiente
+                        numeros = re.findall(r'(\d{1,3}(?:\.\d{3})*|\d+)', texto_despues)
+                        
+                        if len(numeros) >= 3:
+                            # El primer número es Cant Pasos, el tercero (o último grande) es Valor a Pagar
+                            pasos_texto = numeros[0].replace('.', '')
+                            if pasos_texto.isdigit():
+                                pasos_power_bi = int(pasos_texto)
+                                st.success(f"👣 Pasos (alternativo): {pasos_power_bi}")
+                            
+                            # Buscar el valor (normalmente el número más grande después de los primeros)
+                            mayor_valor = 0
+                            for num in numeros[2:]:  # Empezar desde el tercer número
+                                num_limpio = num.replace('.', '').replace(',', '')
+                                if num_limpio.isdigit():
+                                    valor_num = float(num_limpio)
+                                    if valor_num > mayor_valor:
+                                        mayor_valor = valor_num
+                            
+                            if mayor_valor > 10000:  # Valor razonable
+                                valor_power_bi = mayor_valor
+                                st.success(f"💰 Valor (alternativo): ${valor_power_bi:,.0f}")
+                    
+            except Exception as e:
+                st.error(f"❌ Error procesando el contenedor: {e}")
+            
+            # ESTRATEGIA DE RESERVA: Si no encontramos los datos, buscar en elementos individuales
+            if not pasos_power_bi or not valor_power_bi:
+                st.warning("🔄 Usando estrategia de búsqueda individual...")
+                
+                # Buscar PEAJE ALVARADO específicamente
+                peaje_selectors = [
+                    "//*[contains(text(), 'PEAJE ALVARADO')]",
+                    "//*[contains(text(), 'Peaje Alvarado')]",
+                ]
+                
+                peaje_element = None
+                for selector in peaje_selectors:
+                    try:
                         elementos = driver.find_elements(By.XPATH, selector)
                         for elemento in elementos:
                             if elemento.is_displayed():
-                                titulo_element = elemento
-                                st.success(f"✅ Tabla 'RESUMEN COMERCIOS' encontrada (intento {intento + 1})")
+                                peaje_element = elemento
                                 break
-                        if titulo_element:
+                        if peaje_element:
                             break
-                    
-                    if titulo_element:
-                        break
-                    else:
-                        st.warning(f"⚠️ Intento {intento + 1}: No se encontró la tabla, reintentando...")
-                        time.sleep(3)
-                        
-                except Exception as e:
-                    st.warning(f"⚠️ Error en intento {intento + 1}: {e}")
-                    time.sleep(3)
-            
-            if not titulo_element:
-                st.error("❌ No se encontró la tabla 'RESUMEN COMERCIOS' después de múltiples intentos")
-                return None, None
-            
-            # BUSCAR PEAJE ALVARADO Y EXTRAER LOS VALORES ACTUALES FILTRADOS
-            st.info("🔍 Buscando datos actuales de PEAJE ALVARADO...")
-            
-            # Buscar todos los textos que contengan ALVARADO
-            textos_alvarado = driver.find_elements(By.XPATH, "//*[contains(text(), 'ALVARADO')]")
-            
-            elemento_alvarado = None
-            for texto in textos_alvarado:
-                if texto.is_displayed():
-                    texto_completo = texto.text
-                    # Buscar elementos que tengan datos (contengan números)
-                    if 'PEAJE ALVARADO' in texto_completo.upper() and any(c.isdigit() for c in texto_completo):
-                        elemento_alvarado = texto
-                        st.info(f"📊 Encontrado PEAJE ALVARADO con datos: {texto_completo[:100]}...")  # Mostrar solo primeros 100 chars
-                        break
-            
-            if elemento_alvarado:
-                # Obtener el contexto completo (fila completa de la tabla)
-                try:
-                    fila_completa = elemento_alvarado.find_element(By.XPATH, "./ancestor::tr | ./ancestor::div[position()<=5]")
-                    texto_fila_completa = fila_completa.text
-                    st.info(f"📊 Fila completa: {texto_fila_completa}")
-                    
-                    # EXTRAER CANTIDAD DE PASOS - Primer número después de "PEAJE ALVARADO"
-                    patron_pasos = r'PEAJE ALVARADO\s+([\d\.,]+)'
-                    match_pasos = re.search(patron_pasos, texto_fila_completa, re.IGNORECASE)
-                    
-                    if match_pasos:
-                        pasos_texto = match_pasos.group(1).replace('.', '').replace(',', '')
-                        if pasos_texto.isdigit():
-                            pasos_power_bi = int(pasos_texto)
-                            st.success(f"👣 Cantidad de pasos extraída: {pasos_power_bi}")
-                    
-                    # EXTRAER VALOR - Buscar el último número grande (formato monetario)
-                    # Buscar patrones: $10.485.400 o 10485400 o 10,485,400
-                    patrones_valor = [
-                        r'\$?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)',  # $10.485.400
-                        r'\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',  # $10,485,400.00
-                        r'\b(\d{6,})\b'  # 10485400
-                    ]
-                    
-                    for patron in patrones_valor:
-                        matches_valor = re.findall(patron, texto_fila_completa)
-                        for match in matches_valor:
-                            if match:
-                                try:
-                                    # Limpiar y convertir el valor
-                                    valor_limpio = str(match).replace('$', '').replace('.', '').replace(',', '').strip()
-                                    if valor_limpio.isdigit():
-                                        valor_num = float(valor_limpio)
-                                        # Verificar que sea un valor razonable (mayor a 10,000)
-                                        if valor_num > 10000:
-                                            valor_power_bi = valor_num
-                                            st.success(f"💰 Valor extraído: ${valor_power_bi:,.0f}")
-                                            break
-                                except:
-                                    continue
-                        if valor_power_bi:
-                            break
-                            
-                except Exception as e:
-                    st.error(f"❌ Error extrayendo datos de la fila: {e}")
-            
-            # ESTRATEGIA ALTERNATIVA: Si no encontramos con el método anterior
-            if not pasos_power_bi or not valor_power_bi:
-                st.warning("⚠️ Estrategia alternativa: buscando en elementos hermanos...")
+                    except:
+                        continue
                 
-                try:
-                    # Buscar elementos cerca de ALVARADO
-                    contenedor = elemento_alvarado.find_element(By.XPATH, "./ancestor::div[position()<=10]")
-                    texto_contenedor = contenedor.text
-                    
-                    # Buscar todos los números en el contenedor
-                    numeros = re.findall(r'(\d{1,3}(?:\.\d{3})*|\d+)', texto_contenedor)
-                    st.info(f"🔍 Números encontrados en el área: {numeros}")
-                    
-                    # El primer número después de ALVARADO suele ser la cantidad de pasos
-                    idx_alvarado = texto_contenedor.upper().find('ALVARADO')
-                    if idx_alvarado >= 0:
-                        texto_despues = texto_contenedor[idx_alvarado + len('ALVARADO'):]
-                        numeros_despues = re.findall(r'(\d+)', texto_despues.replace('.', '').replace(',', ''))
+                if peaje_element:
+                    # Buscar elementos hermanos que contengan números
+                    try:
+                        parent = peaje_element.find_element(By.XPATH, "./..")
+                        siblings = parent.find_elements(By.XPATH, "./*")
                         
-                        if numeros_despues and not pasos_power_bi:
-                            pasos_power_bi = int(numeros_despues[0])
-                            st.success(f"👣 Pasos (alternativo): {pasos_power_bi}")
-                    
-                    # Buscar el valor más grande (probablemente el valor a pagar)
-                    if not valor_power_bi:
-                        mayor_valor = 0
-                        for num in numeros:
-                            num_limpio = num.replace('.', '').replace(',', '')
-                            if num_limpio.isdigit():
-                                valor_num = float(num_limpio)
-                                if valor_num > mayor_valor and valor_num > 100000:  # Valores mayores a 100,000
-                                    mayor_valor = valor_num
+                        numeros_encontrados = []
+                        for sibling in siblings:
+                            texto = sibling.text.strip()
+                            # Buscar números (excluyendo el texto del peaje)
+                            if texto and texto != peaje_element.text and any(c.isdigit() for c in texto):
+                                # Extraer números del texto
+                                numeros = re.findall(r'\d{1,3}(?:\.\d{3})*|\d+', texto)
+                                numeros_encontrados.extend(numeros)
                         
-                        if mayor_valor > 0:
-                            valor_power_bi = mayor_valor
-                            st.success(f"💰 Valor (alternativo): ${valor_power_bi:,.0f}")
+                        if len(numeros_encontrados) >= 2:
+                            # El primer número debería ser pasos, el último grande debería ser valor
+                            pasos_texto = numeros_encontrados[0].replace('.', '')
+                            if pasos_texto.isdigit():
+                                pasos_power_bi = int(pasos_texto)
+                                st.success(f"👣 Pasos (hermanos): {pasos_power_bi}")
                             
-                except Exception as e:
-                    st.error(f"❌ Error en estrategia alternativa: {e}")
+                            # Buscar el valor más grande (excluyendo el primero)
+                            if len(numeros_encontrados) > 1:
+                                mayor_valor = 0
+                                for num in numeros_encontrados[1:]:
+                                    num_limpio = num.replace('.', '').replace(',', '')
+                                    if num_limpio.isdigit():
+                                        valor_num = float(num_limpio)
+                                        if valor_num > mayor_valor and valor_num > 10000:
+                                            mayor_valor = valor_num
+                                
+                                if mayor_valor > 0:
+                                    valor_power_bi = mayor_valor
+                                    st.success(f"💰 Valor (hermanos): ${valor_power_bi:,.0f}")
+                                    
+                    except Exception as e:
+                        st.error(f"❌ Error en estrategia de hermanos: {e}")
             
-            # VERIFICAR QUE SE HAYAN EXTRAÍDO AMBOS VALORES
-            if pasos_power_bi and valor_power_bi:
-                st.success(f"✅ Extracción completada - Pasos: {pasos_power_bi}, Valor: ${valor_power_bi:,.0f}")
-            else:
-                st.error("❌ No se pudieron extraer todos los valores necesarios")
-                if pasos_power_bi:
-                    st.error(f"❌ Faltó extraer: Valor a Pagar")
-                elif valor_power_bi:
-                    st.error(f"❌ Faltó extraer: Cantidad de Pasos")
-                else:
-                    st.error("❌ Faltó extraer: Cantidad de Pasos y Valor a Pagar")
-                    
         except Exception as e:
             st.error(f"❌ Error en la extracción: {e}")
             
-        # ÚLTIMO INTENTO: Buscar cualquier dato disponible
-        if not pasos_power_bi or not valor_power_bi:
-            st.warning("🔄 Último intento: búsqueda exhaustiva...")
+        # VERIFICACIÓN FINAL
+        if pasos_power_bi and valor_power_bi:
+            st.success(f"✅ Extracción completada - Pasos: {pasos_power_bi}, Valor: ${valor_power_bi:,.0f}")
+        else:
+            st.error("❌ No se pudieron extraer todos los valores necesarios")
             
+            # DEBUG: Mostrar todos los textos disponibles
+            st.info("🔍 DEBUG: Buscando todos los textos con ALVARADO...")
             try:
-                # Buscar todos los textos visibles que contengan números
-                elementos_numeros = driver.find_elements(By.XPATH, "//*[text()[contains(., 'ALVARADO')]]//following::*[text()[number(translate(., ',.', ''))]]")
-                
-                for elemento in elementos_numeros:
-                    if elemento.is_displayed():
-                        texto = elemento.text
-                        if any(char.isdigit() for char in texto):
-                            st.info(f"🔍 Elemento numérico cerca: {texto}")
-                            
-            except Exception as e:
-                st.error(f"❌ Error en último intento: {e}")
+                todos_alvarados = driver.find_elements(By.XPATH, "//*[contains(text(), 'ALVARADO')]")
+                for i, elem in enumerate(todos_alvarados):
+                    if elem.is_displayed():
+                        st.info(f"   {i}: {elem.text}")
+            except:
+                pass
         
         return valor_power_bi, pasos_power_bi
         
