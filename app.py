@@ -343,7 +343,7 @@ def encontrar_y_seleccionar_fecha_exacta(driver, fecha_objetivo):
 
 def extraer_datos_power_bi(fecha_validacion):
     """
-    Extrae datos del dashboard de Power BI - VERSIÓN ORIGINAL (QUE FUNCIONABA)
+    Extrae datos REALES del dashboard de Power BI
     """
     driver = None
     try:
@@ -356,30 +356,141 @@ def extraer_datos_power_bi(fecha_validacion):
         
         st.info("🌐 Conectando con Power BI...")
         driver.get(power_bi_url)
-        time.sleep(10)
+        time.sleep(12)  # Dar más tiempo para cargar
         
-        # Aquí necesitarías la lógica específica para interactuar con el Power BI
-        # Esto es un ejemplo genérico - necesitarías adaptarlo a la estructura real del dashboard
-        
-        # Buscar y seleccionar la fecha EXACTA
+        # Seleccionar la fecha EXACTA
         st.info(f"📅 Seleccionando fecha: {fecha_validacion}")
         if not encontrar_y_seleccionar_fecha_exacta(driver, fecha_validacion):
             return None, None
         
-        # Esperar a que carguen los datos
-        time.sleep(5)
+        time.sleep(5)  # Esperar a que cargue la selección
         
-        # Extraer datos de "RESUMEN COMERCIOS" - PEAJE ALVARADO
-        st.info("🔍 Extrayendo datos del resumen de comercios...")
+        # Extraer datos REALES de "RESUMEN COMERCIOS" - PEAJE ALVARADO
+        st.info("🔍 Extrayendo datos reales del resumen de comercios...")
         
-        # VALORES DE EJEMPLO - MANTENIENDO LOS VALORES ORIGINALES QUE FUNCIONABAN
-        valor_power_bi = 10472900  # Ejemplo: $10.472.900
-        pasos_power_bi = 554       # Ejemplo: 554 pasos
+        valor_power_bi = None
+        pasos_power_bi = None
+        
+        # Buscar la tabla "RESUMEN COMERCIOS"
+        try:
+            # Buscar el título de la tabla
+            titulo_selectors = [
+                "//*[contains(text(), 'RESUMEN COMERCIOS')]",
+                "//*[contains(text(), 'Resumen Comercios')]",
+                "//*[contains(text(), 'RESUMEN') and contains(text(), 'COMERCIOS')]",
+            ]
+            
+            titulo_element = None
+            for selector in titulo_selectors:
+                try:
+                    elementos = driver.find_elements(By.XPATH, selector)
+                    for elemento in elementos:
+                        if elemento.is_displayed():
+                            titulo_element = elemento
+                            break
+                    if titulo_element:
+                        break
+                except:
+                    continue
+            
+            if titulo_element:
+                st.success("✅ Tabla 'RESUMEN COMERCIOS' encontrada")
+                
+                # Buscar PEAJE ALVARADO en la tabla
+                peaje_selectors = [
+                    "//*[contains(text(), 'PEAJE ALVARADO')]",
+                    "//*[contains(text(), 'Peaje Alvarado')]",
+                    "//*[contains(text(), 'ALVARADO')]",
+                ]
+                
+                peaje_element = None
+                for selector in peaje_selectors:
+                    try:
+                        elementos = driver.find_elements(By.XPATH, selector)
+                        for elemento in elementos:
+                            if elemento.is_displayed():
+                                peaje_element = elemento
+                                break
+                        if peaje_element:
+                            break
+                    except:
+                        continue
+                
+                if peaje_element:
+                    st.success("✅ PEAJE ALVARADO encontrado")
+                    
+                    # Buscar la fila completa que contiene PEAJE ALVARADO
+                    try:
+                        # Buscar el contenedor padre (probablemente una fila de tabla)
+                        fila_element = peaje_element.find_element(By.XPATH, "./ancestor::tr | ./ancestor::div[contains(@class, 'row')] | ./ancestor::div[contains(@style, 'row')]")
+                        
+                        # Obtener todo el texto de la fila
+                        texto_fila = fila_element.text
+                        st.info(f"📊 Texto de la fila: {texto_fila}")
+                        
+                        # Buscar el valor monetario (formato: $10.458.400)
+                        valor_match = re.search(r'\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)', texto_fila)
+                        if valor_match:
+                            valor_power_bi = valor_match.group(0)
+                            st.success(f"💰 Valor encontrado: {valor_power_bi}")
+                        else:
+                            st.error("❌ No se pudo encontrar el valor monetario")
+                        
+                        # Buscar la cantidad de pasos (número sin símbolos)
+                        # Buscar números que estén cerca de "Pasos" o que sean cantidades razonables
+                        numeros = re.findall(r'\b(\d{2,4})\b', texto_fila)
+                        if numeros:
+                            # Filtrar números que parezcan cantidades de pasos (entre 100 y 5000)
+                            for num in numeros:
+                                num_int = int(num)
+                                if 100 <= num_int <= 5000:
+                                    pasos_power_bi = num_int
+                                    st.success(f"👣 Pasos encontrados: {pasos_power_bi}")
+                                    break
+                        
+                        if not pasos_power_bi:
+                            st.error("❌ No se pudo encontrar la cantidad de pasos")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error procesando fila: {e}")
+                        
+                        # Estrategia alternativa: buscar en elementos cercanos
+                        try:
+                            # Buscar elementos hermanos o cercanos que contengan valores
+                            contenedor = peaje_element.find_element(By.XPATH, "./ancestor::div[position()<=3]")
+                            texto_contenedor = contenedor.text
+                            st.info(f"📊 Texto del contenedor: {texto_contenedor}")
+                            
+                            # Buscar valor monetario
+                            valor_match = re.search(r'\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)', texto_contenedor)
+                            if valor_match:
+                                valor_power_bi = valor_match.group(0)
+                                st.success(f"💰 Valor encontrado (alternativo): {valor_power_bi}")
+                            
+                            # Buscar pasos
+                            numeros = re.findall(r'\b(\d{2,4})\b', texto_contenedor)
+                            for num in numeros:
+                                num_int = int(num)
+                                if 100 <= num_int <= 5000:
+                                    pasos_power_bi = num_int
+                                    st.success(f"👣 Pasos encontrados (alternativo): {pasos_power_bi}")
+                                    break
+                                    
+                        except Exception as e2:
+                            st.error(f"❌ Error estrategia alternativa: {e2}")
+                
+                else:
+                    st.error("❌ No se encontró PEAJE ALVARADO en la tabla")
+            else:
+                st.error("❌ No se encontró la tabla 'RESUMEN COMERCIOS'")
+                
+        except Exception as e:
+            st.error(f"❌ Error buscando tabla: {e}")
         
         return valor_power_bi, pasos_power_bi
         
     except Exception as e:
-        st.error(f"Error extrayendo datos de Power BI: {e}")
+        st.error(f"❌ Error durante la extracción de Power BI: {e}")
         return None, None
     finally:
         if driver:
@@ -389,13 +500,31 @@ def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
     """
     Compara los valores y determina si coinciden
     """
-    diferencia_valor = abs(valor_excel - valor_power_bi)
-    diferencia_pasos = abs(pasos_excel - pasos_power_bi)
-    
-    coinciden_valor = diferencia_valor < 0.01  # Tolerancia para valores decimales
-    coinciden_pasos = diferencia_pasos == 0
-    
-    return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+    try:
+        # Convertir valores de Power BI a números
+        if valor_power_bi:
+            # Limpiar formato monetario: $10.458.400 -> 10458400
+            valor_limpio = str(valor_power_bi).replace('$', '').replace('.', '').replace(',', '').strip()
+            valor_power_bi_num = float(valor_limpio)
+        else:
+            valor_power_bi_num = 0
+            
+        if pasos_power_bi:
+            pasos_power_bi_num = int(pasos_power_bi)
+        else:
+            pasos_power_bi_num = 0
+        
+        diferencia_valor = abs(valor_excel - valor_power_bi_num)
+        diferencia_pasos = abs(pasos_excel - pasos_power_bi_num)
+        
+        coinciden_valor = diferencia_valor < 1.0  # Tolerancia de 1 peso
+        coinciden_pasos = diferencia_pasos == 0
+        
+        return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+        
+    except Exception as e:
+        st.error(f"❌ Error comparando valores: {e}")
+        return False, False, 0, 0
 
 # ===== INTERFAZ PRINCIPAL =====
 
