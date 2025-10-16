@@ -328,7 +328,7 @@ def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
 # ===== INTERFAZ PRINCIPAL CON NUEVO DISEÑO =====
 
 def main():
-    st.title("💰 Validador Power BI - Conciliaciones")
+    st.title("💰 Validador Conciliaciones ALTERNATIVAS VIALES- ALVARADO")
     st.markdown("---")
     
     # Información del reporte en sidebar
