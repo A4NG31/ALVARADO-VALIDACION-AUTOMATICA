@@ -1,6 +1,7 @@
 import os
 import sys
 
+
 # ===== CONFIGURACIÓN CRÍTICA PARA STREAMLIT CLOUD =====
 os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
 os.environ['STREAMLIT_CI'] = 'true'
