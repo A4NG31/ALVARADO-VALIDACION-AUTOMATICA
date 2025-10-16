@@ -350,24 +350,24 @@ def main():
     st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
     st.sidebar.info(f"✅ Pandas {pd.__version__}")
     
-    # Cargar archivo Excel en sidebar
-    with st.sidebar:
-        st.header("📁 Cargar Archivo Excel")
-        uploaded_file = st.file_uploader("Selecciona el archivo Excel", type=['xlsx', 'xls'])
-        
-        if uploaded_file is not None:
-            st.success(f"Archivo cargado: {uploaded_file.name}")
-            
-            # Extraer fecha del nombre del archivo
-            fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
-            
-            if fecha_validacion:
-                st.info(f"📅 Fecha detectada: {fecha_validacion}")
-            else:
-                st.warning("No se pudo detectar la fecha del archivo")
-                fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+    # ===== CARGAR ARCHIVO EXCEL (FUERA DEL SIDEBAR) =====
+    st.subheader("📁 Cargar Archivo Excel")
+    uploaded_file = st.file_uploader(
+        "Selecciona el archivo Excel con formato: CrptTransaccionesTotal DD-MM-YYYY gopass", 
+        type=['xlsx', 'xls']
+    )
     
     # Contenido principal
+    if uploaded_file is not None:
+        # Extraer fecha del nombre del archivo
+        fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
+        
+        if fecha_validacion:
+            st.success(f"📅 Fecha detectada automáticamente: {fecha_validacion}")
+        else:
+            st.warning("⚠️ No se pudo detectar la fecha del archivo")
+            fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+    
     if uploaded_file is not None and fecha_validacion:
         
         # Procesar el archivo Excel
@@ -461,7 +461,7 @@ def main():
                 - Existe el texto "TOTAL TRANSACCIONES" seguido de un número
                 """)
     
-    else:
+    elif uploaded_file is None:
         st.info("👈 Por favor, carga un archivo Excel para comenzar la validación")
 
     # Información de ayuda
