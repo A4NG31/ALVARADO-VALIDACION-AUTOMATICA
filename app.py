@@ -273,57 +273,72 @@ def setup_selenium_driver():
 def encontrar_y_seleccionar_fecha_exacta(driver, fecha_objetivo):
     """
     Encuentra y selecciona la fecha EXACTA en el Power BI
-    Basado en el formato: 'conciliación ALTERNATIVAS VIALES del 2025-10-16 06:00 al 10-17 5:59'
     """
     try:
         # Convertir la fecha objetivo a formato datetime
         fecha_obj = datetime.strptime(fecha_objetivo, "%Y-%m-%d")
-        
-        # Formatear la fecha para la búsqueda (formato que aparece en el Power BI)
-        # Ejemplo: "2025-10-16" para buscar "2025-10-16 06:00"
         fecha_busqueda = fecha_obj.strftime("%Y-%m-%d")
         
         st.info(f"🔍 Buscando conciliación para: {fecha_busqueda}")
         
-        # Buscar elementos que contengan la fecha exacta
-        # Patrones de búsqueda para el formato del Power BI
-        patrones_busqueda = [
-            f"//*[contains(text(), 'conciliación ALTERNATIVAS VIALES del {fecha_busqueda}')]",
-            f"//*[contains(text(), 'CONCILIACIÓN ALTERNATIVAS VIALES DEL {fecha_busqueda}')]",
-            f"//*[contains(text(), '{fecha_busqueda} 06:00')]",
-            f"//*[contains(text(), '{fecha_busqueda}')]",
-        ]
+        # ESTRATEGIA 1: Buscar por el patrón completo exacto
+        patron_exacto = f"conciliación ALTERNATIVAS VIALES del {fecha_busqueda} 06:00 al"
+        try:
+            elemento = driver.find_element(By.XPATH, f"//*[contains(text(), '{patron_exacto}')]")
+            if elemento.is_displayed():
+                driver.execute_script("arguments[0].scrollIntoView(true);", elemento)
+                time.sleep(1)
+                driver.execute_script("arguments[0].click();", elemento)
+                st.success(f"✅ Clic en: {elemento.text.strip()}")
+                time.sleep(3)
+                return True
+        except:
+            pass
         
-        elemento_fecha = None
-        for patron in patrones_busqueda:
-            try:
-                elementos = driver.find_elements(By.XPATH, patron)
-                for elemento in elementos:
-                    if elemento.is_displayed():
-                        texto_elemento = elemento.text.strip()
-                        # Verificar que el texto contiene la fecha exacta
-                        if fecha_busqueda in texto_elemento:
-                            elemento_fecha = elemento
-                            st.success(f"✅ Encontrada: {texto_elemento}")
-                            break
-                if elemento_fecha:
-                    break
-            except Exception as e:
-                continue
+        # ESTRATEGIA 2: Buscar por la fecha específica
+        try:
+            elementos = driver.find_elements(By.XPATH, f"//*[contains(text(), '{fecha_busqueda} 06:00')]")
+            for elemento in elementos:
+                if elemento.is_displayed() and fecha_busqueda in elemento.text:
+                    driver.execute_script("arguments[0].scrollIntoView(true);", elemento)
+                    time.sleep(1)
+                    driver.execute_script("arguments[0].click();", elemento)
+                    st.success(f"✅ Clic en: {elemento.text.strip()}")
+                    time.sleep(3)
+                    return True
+        except:
+            pass
         
-        if elemento_fecha:
-            # Hacer clic en el elemento de fecha
-            driver.execute_script("arguments[0].scrollIntoView(true);", elemento_fecha)
-            time.sleep(1)
-            driver.execute_script("arguments[0].click();", elemento_fecha)
-            time.sleep(3)
-            return True
-        else:
-            st.error(f"❌ No se encontró la conciliación para la fecha {fecha_busqueda}")
-            return False
+        # ESTRATEGIA 3: Buscar cualquier elemento que contenga la fecha
+        try:
+            elementos = driver.find_elements(By.XPATH, f"//*[contains(text(), '{fecha_busqueda}')]")
+            for elemento in elementos:
+                texto = elemento.text.strip()
+                if elemento.is_displayed() and fecha_busqueda in texto and '06:00' in texto:
+                    driver.execute_script("arguments[0].scrollIntoView(true);", elemento)
+                    time.sleep(1)
+                    driver.execute_script("arguments[0].click();", elemento)
+                    st.success(f"✅ Clic en: {texto}")
+                    time.sleep(3)
+                    return True
+        except:
+            pass
+        
+        # ESTRATEGIA 4: Mostrar todas las opciones disponibles para debug
+        st.error(f"❌ No se pudo encontrar la conciliación para {fecha_busqueda}")
+        st.info("📋 Conciliaciones disponibles:")
+        try:
+            opciones = driver.find_elements(By.XPATH, "//*[contains(text(), 'conciliación ALTERNATIVAS VIALES') or contains(text(), 'CONCILIACIÓN ALTERNATIVAS VIALES')]")
+            for opcion in opciones:
+                if opcion.is_displayed():
+                    st.info(f"• {opcion.text.strip()}")
+        except:
+            st.info("No se pudieron listar las opciones disponibles")
+        
+        return False
             
     except Exception as e:
-        st.error(f"❌ Error seleccionando fecha exacta: {e}")
+        st.error(f"❌ Error seleccionando fecha: {e}")
         return False
 
 def extraer_datos_power_bi(fecha_validacion):
