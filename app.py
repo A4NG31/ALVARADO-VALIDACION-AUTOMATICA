@@ -419,65 +419,125 @@ def extraer_datos_power_bi(fecha_validacion):
                 if peaje_element:
                     st.success("✅ PEAJE ALVARADO encontrado")
                     
-                    # Buscar la fila completa que contiene PEAJE ALVARADO
+                    # ESTRATEGIA MEJORADA: Buscar la estructura de tabla completa
                     try:
-                        # Buscar el contenedor padre (probablemente una fila de tabla)
-                        fila_element = peaje_element.find_element(By.XPATH, "./ancestor::tr | ./ancestor::div[contains(@class, 'row')] | ./ancestor::div[contains(@style, 'row')]")
+                        # Buscar el contenedor de tabla completo
+                        tabla_element = peaje_element.find_element(By.XPATH, "./ancestor::table | ./ancestor::div[contains(@class, 'table')] | ./ancestor::div[contains(@style, 'table')]")
                         
-                        # Obtener todo el texto de la fila
-                        texto_fila = fila_element.text
-                        st.info(f"📊 Texto de la fila: {texto_fila}")
+                        # Obtener todas las filas de la tabla
+                        filas = tabla_element.find_elements(By.XPATH, ".//tr | .//div[contains(@class, 'row')]")
                         
-                        # Buscar el valor monetario (formato: $10.458.400)
-                        valor_match = re.search(r'\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)', texto_fila)
-                        if valor_match:
-                            valor_power_bi = valor_match.group(0)
-                            st.success(f"💰 Valor encontrado: {valor_power_bi}")
-                        else:
-                            st.error("❌ No se pudo encontrar el valor monetario")
+                        # Buscar la fila que contiene PEAJE ALVARADO
+                        fila_peaje = None
+                        for fila in filas:
+                            if 'PEAJE ALVARADO' in fila.text.upper():
+                                fila_peaje = fila
+                                break
                         
-                        # Buscar la cantidad de pasos (número sin símbolos)
-                        # Buscar números que estén cerca de "Pasos" o que sean cantidades razonables
-                        numeros = re.findall(r'\b(\d{2,4})\b', texto_fila)
-                        if numeros:
-                            # Filtrar números que parezcan cantidades de pasos (entre 100 y 5000)
-                            for num in numeros:
-                                num_int = int(num)
-                                if 100 <= num_int <= 5000:
-                                    pasos_power_bi = num_int
-                                    st.success(f"👣 Pasos encontrados: {pasos_power_bi}")
-                                    break
-                        
-                        if not pasos_power_bi:
-                            st.error("❌ No se pudo encontrar la cantidad de pasos")
+                        if fila_peaje:
+                            # Obtener todas las celdas/columnas de la fila
+                            celdas = fila_peaje.find_elements(By.XPATH, ".//td | .//div[contains(@class, 'cell')] | .//span")
                             
+                            # Buscar los valores en las posiciones correctas
+                            # Según la imagen: COMERCIO | Cant Pasos | Cant Ajustes | Valor a Pagar
+                            # PEAJE ALVARADO | 591 | 33 | $10.485.400
+                            
+                            texto_fila = fila_peaje.text
+                            st.info(f"📊 Texto completo de la fila: {texto_fila}")
+                            
+                            # Dividir el texto por espacios y buscar patrones
+                            partes = texto_fila.split()
+                            
+                            # Buscar el valor monetario (formato: $10.485.400)
+                            valor_match = re.search(r'\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)', texto_fila)
+                            if valor_match:
+                                valor_power_bi_texto = valor_match.group(0)
+                                # Convertir a número: $10.485.400 -> 10485400
+                                valor_limpio = valor_power_bi_texto.replace('$', '').replace('.', '').strip()
+                                try:
+                                    valor_power_bi = float(valor_limpio)
+                                    st.success(f"💰 Valor encontrado: {valor_power_bi_texto} -> {valor_power_bi:,.0f}")
+                                except:
+                                    st.error(f"❌ Error convirtiendo valor: {valor_power_bi_texto}")
+                            else:
+                                st.error("❌ No se pudo encontrar el valor monetario")
+                            
+                            # Buscar la cantidad de pasos - ESTRATEGIA MEJORADA
+                            # Buscar números que estén en la posición de "Cant Pasos"
+                            # Usar expresión regular para encontrar todos los números
+                            numeros = re.findall(r'\b(\d+)\b', texto_fila)
+                            
+                            if len(numeros) >= 3:  # Debería haber al menos 3 números: Cant Pasos, Cant Ajustes, y partes del valor
+                                # El primer número después del nombre debería ser Cant Pasos (591)
+                                # Buscar el número que está en la posición de cantidad de pasos
+                                # Normalmente es el primer número después del nombre del comercio
+                                
+                                # Encontrar la posición de "PEAJE ALVARADO"
+                                idx_peaje = texto_fila.upper().find('PEAJE ALVARADO')
+                                if idx_peaje >= 0:
+                                    # Tomar el texto después del nombre del comercio
+                                    texto_despues_peaje = texto_fila[idx_peaje + len('PEAJE ALVARADO'):]
+                                    # Buscar el primer número en ese texto
+                                    primer_numero_match = re.search(r'\b(\d+)\b', texto_despues_peaje)
+                                    if primer_numero_match:
+                                        pasos_power_bi = int(primer_numero_match.group(1))
+                                        st.success(f"👣 Pasos encontrados: {pasos_power_bi}")
+                                    else:
+                                        st.error("❌ No se pudo encontrar la cantidad de pasos después del nombre")
+                                else:
+                                    # Estrategia alternativa: usar el primer número que parezca cantidad de pasos
+                                    for num in numeros:
+                                        num_int = int(num)
+                                        if 100 <= num_int <= 5000:  # Rango razonable para pasos
+                                            pasos_power_bi = num_int
+                                            st.success(f"👣 Pasos encontrados (alternativo): {pasos_power_bi}")
+                                            break
+                            else:
+                                st.error(f"❌ No se encontraron suficientes números en la fila. Encontrados: {numeros}")
+                            
+                            # Si no encontramos pasos, mostrar debug info
+                            if not pasos_power_bi:
+                                st.warning("🔍 Debug - Todos los números encontrados en la fila:")
+                                for i, num in enumerate(numeros):
+                                    st.warning(f"  {i}: {num}")
+                                    
                     except Exception as e:
-                        st.error(f"❌ Error procesando fila: {e}")
+                        st.error(f"❌ Error procesando estructura de tabla: {e}")
                         
-                        # Estrategia alternativa: buscar en elementos cercanos
+                        # ESTRATEGIA ALTERNATIVA: Buscar elementos hermanos específicos
                         try:
-                            # Buscar elementos hermanos o cercanos que contengan valores
-                            contenedor = peaje_element.find_element(By.XPATH, "./ancestor::div[position()<=3]")
-                            texto_contenedor = contenedor.text
-                            st.info(f"📊 Texto del contenedor: {texto_contenedor}")
+                            st.info("🔄 Intentando estrategia alternativa...")
+                            
+                            # Buscar elementos que contengan números cerca de PEAJE ALVARADO
+                            contenedor_padre = peaje_element.find_element(By.XPATH, "./ancestor::div[position()<=5]")
+                            texto_completo = contenedor_padre.text
+                            st.info(f"📊 Texto del área circundante: {texto_completo}")
                             
                             # Buscar valor monetario
-                            valor_match = re.search(r'\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)', texto_contenedor)
+                            valor_match = re.search(r'\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)', texto_completo)
                             if valor_match:
-                                valor_power_bi = valor_match.group(0)
-                                st.success(f"💰 Valor encontrado (alternativo): {valor_power_bi}")
+                                valor_power_bi_texto = valor_match.group(0)
+                                valor_limpio = valor_power_bi_texto.replace('$', '').replace('.', '').strip()
+                                try:
+                                    valor_power_bi = float(valor_limpio)
+                                    st.success(f"💰 Valor encontrado (alternativo): {valor_power_bi_texto} -> {valor_power_bi:,.0f}")
+                                except:
+                                    pass
                             
-                            # Buscar pasos
-                            numeros = re.findall(r'\b(\d{2,4})\b', texto_contenedor)
-                            for num in numeros:
-                                num_int = int(num)
-                                if 100 <= num_int <= 5000:
-                                    pasos_power_bi = num_int
-                                    st.success(f"👣 Pasos encontrados (alternativo): {pasos_power_bi}")
-                                    break
-                                    
+                            # Buscar pasos - buscar el primer número razonable después de PEAJE ALVARADO
+                            idx_peaje = texto_completo.upper().find('PEAJE ALVARADO')
+                            if idx_peaje >= 0:
+                                texto_despues = texto_completo[idx_peaje + len('PEAJE ALVARADO'):]
+                                numeros_despues = re.findall(r'\b(\d+)\b', texto_despues)
+                                for num in numeros_despues:
+                                    num_int = int(num)
+                                    if 100 <= num_int <= 5000:
+                                        pasos_power_bi = num_int
+                                        st.success(f"👣 Pasos encontrados (alternativo): {pasos_power_bi}")
+                                        break
+                                        
                         except Exception as e2:
-                            st.error(f"❌ Error estrategia alternativa: {e2}")
+                            st.error(f"❌ Error en estrategia alternativa: {e2}")
                 
                 else:
                     st.error("❌ No se encontró PEAJE ALVARADO en la tabla")
