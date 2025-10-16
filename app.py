@@ -252,86 +252,7 @@ def find_alvarado_card(driver):
             st.error("❌ No se encontró 'PEAJE ALVARADO' en el reporte")
             return None, None
         
-        # ESTRATEGIA 1: Buscar en el mismo contenedor
-        try:
-            container = titulo_element.find_element(By.XPATH, "./..")
-            all_elements = container.find_elements(By.XPATH, ".//*")
-            
-            valores_encontrados = []
-            
-            for elem in all_elements:
-                texto = elem.text.strip()
-                if texto and any(char.isdigit() for char in texto):
-                    # Extraer números
-                    numeros = re.findall(r'\d+(?:\.\d{3})*|\d+', texto)
-                    for num in numeros:
-                        num_limpio = num.replace('.', '')
-                        if num_limpio.isdigit():
-                            valores_encontrados.append(int(num_limpio))
-            
-            # Filtrar valores: el más pequeño son pasos, el más grande es valor
-            if len(valores_encontrados) >= 2:
-                valores_encontrados.sort()
-                
-                # Pasos típicamente son < 10,000
-                pasos = None
-                for val in valores_encontrados:
-                    if val < 10000 and val > 100:
-                        pasos = val
-                        break
-                
-                # Valor típicamente es > 100,000
-                valor = None
-                for val in reversed(valores_encontrados):
-                    if val > 100000:
-                        valor = val
-                        break
-                
-                if pasos and valor:
-                    st.success(f"✅ Estrategia 1: Pasos={pasos}, Valor=${valor:,.0f}")
-                    return valor, pasos
-        except Exception as e:
-            st.warning(f"⚠️ Estrategia 1 falló: {e}")
-        
-        # ESTRATEGIA 2: Buscar en elementos hermanos
-        try:
-            parent = titulo_element.find_element(By.XPATH, "./..")
-            siblings = parent.find_elements(By.XPATH, "./*")
-            
-            valores_encontrados = []
-            
-            for sibling in siblings:
-                if sibling != titulo_element and sibling.is_displayed():
-                    texto = sibling.text.strip()
-                    if texto and any(char.isdigit() for char in texto):
-                        numeros = re.findall(r'\d+(?:\.\d{3})*|\d+', texto)
-                        for num in numeros:
-                            num_limpio = num.replace('.', '')
-                            if num_limpio.isdigit():
-                                valores_encontrados.append(int(num_limpio))
-            
-            if len(valores_encontrados) >= 2:
-                valores_encontrados.sort()
-                
-                pasos = None
-                for val in valores_encontrados:
-                    if val < 10000 and val > 100:
-                        pasos = val
-                        break
-                
-                valor = None
-                for val in reversed(valores_encontrados):
-                    if val > 100000:
-                        valor = val
-                        break
-                
-                if pasos and valor:
-                    st.success(f"✅ Estrategia 2: Pasos={pasos}, Valor=${valor:,.0f}")
-                    return valor, pasos
-        except Exception as e:
-            st.warning(f"⚠️ Estrategia 2 falló: {e}")
-        
-        # ESTRATEGIA 3: Buscar en la tabla RESUMEN COMERCIOS
+        # ESTRATEGIA PRINCIPAL: Buscar en la tabla RESUMEN COMERCIOS
         try:
             # Buscar la tabla completa
             resumen_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'RESUMEN COMERCIOS')]")
@@ -357,33 +278,1589 @@ def find_alvarado_card(driver):
                         alvarado_section = remaining_text[:end_idx].strip()
                         st.info(f"📊 Sección ALVARADO: {alvarado_section}")
                         
-                        # Extraer números de la sección
-                        numeros = re.findall(r'\d+(?:\.\d{3})*|\d+', alvarado_section)
-                        valores_encontrados = []
+                        # EXTRACCIÓN MEJORADA: Buscar valor con símbolo $ primero
+                        valor = None
+                        valor_match = re.search(r'\$[\d,\.]+', alvarado_section)
+                        if valor_match:
+                            valor_texto = valor_match.group(0)
+                            # Limpiar: $10,485,400 o $10.485.400 -> 10485400
+                            valor_limpio = valor_texto.replace('
+
+def extract_powerbi_data(fecha_objetivo):
+    """Función principal para extraer datos de Power BI - MEJORADA"""
+    
+    REPORT_URL = "https://app.powerbi.com/view?r=eyJrIjoiMDA5OGE5MTQtNjQ0MC00ZTdjLWJmNDItNGZhYmQxOWE5ZTk3IiwidCI6ImY5MTdlZDFiLWI0MDMtNDljNS1iODBiLWJhYWUzY2UwMzc1YSJ9"
+    
+    driver = setup_driver()
+    if not driver:
+        return None, None
+    
+    try:
+        # 1. Navegar al reporte
+        with st.spinner("🌐 Conectando con Power BI..."):
+            driver.get(REPORT_URL)
+            time.sleep(10)
+        
+        # 2. Tomar screenshot inicial
+        driver.save_screenshot("powerbi_inicial.png")
+        
+        # 3. Hacer clic en la conciliación específica
+        if not click_conciliacion_date(driver, fecha_objetivo):
+            return None, None
+        
+        # 4. Esperar a que cargue la selección
+        time.sleep(5)
+        driver.save_screenshot("powerbi_despues_seleccion.png")
+        
+        # 5. Buscar datos de PEAJE ALVARADO
+        with st.spinner("🔍 Extrayendo datos de PEAJE ALVARADO..."):
+            valor_power_bi, pasos_power_bi = find_alvarado_card(driver)
+        
+        # 6. Tomar screenshot final
+        driver.save_screenshot("powerbi_final.png")
+        
+        return valor_power_bi, pasos_power_bi
+        
+    except Exception as e:
+        st.error(f"❌ Error durante la extracción: {str(e)}")
+        return None, None
+    finally:
+        driver.quit()
+
+def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
+    """Compara los valores y determina si coinciden"""
+    try:
+        diferencia_valor = abs(valor_excel - valor_power_bi) if valor_power_bi else valor_excel
+        diferencia_pasos = abs(pasos_excel - pasos_power_bi) if pasos_power_bi else pasos_excel
+        
+        coinciden_valor = diferencia_valor < 1.0
+        coinciden_pasos = diferencia_pasos == 0
+        
+        return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+        
+    except Exception as e:
+        st.error(f"❌ Error comparando valores: {e}")
+        return False, False, 0, 0
+
+# ===== INTERFAZ PRINCIPAL =====
+
+def main():
+    st.title("💰 Validador Power BI - PEAJE ALVARADO")
+    st.markdown("---")
+    
+    # Sidebar
+    st.sidebar.header("📋 Información del Reporte")
+    st.sidebar.info("""
+    **Objetivo:**
+    - Validar conciliaciones entre Excel y Power BI
+    - Extraer datos de PEAJE ALVARADO
+    - Comparar valores y número de pasos
+    
+    **Estado:** ✅ Mejorado con estrategias de APP GICA
+    **Versión:** v3.0 - Extracción Mejorada
+    """)
+    
+    st.sidebar.header("🛠️ Estado del Sistema")
+    st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
+    st.sidebar.info(f"✅ Pandas {pd.__version__}")
+    
+    # Cargar archivo Excel
+    st.subheader("📁 Cargar Archivo Excel")
+    uploaded_file = st.file_uploader(
+        "Selecciona el archivo Excel (CrptTransaccionesTotal DD-MM-YYYY gopass)", 
+        type=['xlsx', 'xls']
+    )
+    
+    if uploaded_file is not None:
+        # Extraer fecha del nombre
+        fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
+        
+        if fecha_validacion:
+            st.success(f"📅 Fecha detectada: {fecha_validacion}")
+        else:
+            st.warning("⚠️ No se pudo detectar la fecha")
+            fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+        
+        if fecha_validacion:
+            # Procesar Excel
+            with st.spinner("📊 Procesando archivo Excel..."):
+                valor_excel, pasos_excel = procesar_excel(uploaded_file)
+            
+            if valor_excel > 0 and pasos_excel > 0:
+                # Mostrar valores del Excel
+                st.markdown("### 📊 Valores Extraídos del Excel")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💰 Valor a Pagar", f"${valor_excel:,.0f}")
+                with col2:
+                    st.metric("👣 Número de Pasos", f"{pasos_excel}")
+                
+                st.markdown("---")
+                
+                # Botón para extraer de Power BI
+                if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
+                    with st.spinner("🌐 Extrayendo datos de Power BI..."):
+                        valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
+                    
+                    if valor_power_bi is not None and pasos_power_bi is not None:
+                        # Mostrar resultados de Power BI
+                        st.markdown("### 📊 Valores Extraídos de Power BI")
                         
-                        for num in numeros:
-                            num_limpio = num.replace('.', '')
-                            if num_limpio.isdigit():
-                                valores_encontrados.append(int(num_limpio))
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            st.metric("💰 Valor a Pagar (Power BI)", f"${valor_power_bi:,.0f}")
+                        with col4:
+                            st.metric("👣 Número de Pasos (Power BI)", f"{pasos_power_bi}")
                         
-                        if len(valores_encontrados) >= 2:
-                            valores_encontrados.sort()
+                        st.markdown("---")
+                        
+                        # Comparar
+                        st.markdown("### 📊 Resultado de la Validación")
+                        
+                        coinciden_valor, coinciden_pasos, dif_valor, dif_pasos = comparar_valores(
+                            valor_excel, valor_power_bi, pasos_excel, pasos_power_bi
+                        )
+                        
+                        if coinciden_valor and coinciden_pasos:
+                            st.success("🎉 ✅ TODOS LOS VALORES COINCIDEN")
+                            st.balloons()
+                        else:
+                            if not coinciden_valor:
+                                st.error(f"❌ DIFERENCIA EN VALOR: ${dif_valor:,.0f}")
+                            if not coinciden_pasos:
+                                st.error(f"❌ DIFERENCIA EN PASOS: {dif_pasos} pasos")
+                        
+                        # Tabla resumen
+                        st.markdown("### 📋 Resumen de Comparación")
+                        
+                        datos = {
+                            'Concepto': ['Valor a Pagar', 'Número de Pasos'],
+                            'Excel': [f"${valor_excel:,.0f}", f"{pasos_excel}"],
+                            'Power BI': [f"${valor_power_bi:,.0f}", f"{pasos_power_bi}"],
+                            'Resultado': [
+                                '✅ COINCIDE' if coinciden_valor else f'❌ DIFERENCIA: ${dif_valor:,.0f}',
+                                '✅ COINCIDE' if coinciden_pasos else f'❌ DIFERENCIA: {dif_pasos} pasos'
+                            ]
+                        }
+                        
+                        df = pd.DataFrame(datos)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                        
+                        # Screenshots
+                        with st.expander("📸 Ver Capturas del Proceso"):
+                            col1, col2, col3 = st.columns(3)
                             
-                            pasos = None
-                            for val in valores_encontrados:
-                                if val < 10000 and val > 100:
-                                    pasos = val
+                            if os.path.exists("powerbi_inicial.png"):
+                                with col1:
+                                    st.image("powerbi_inicial.png", caption="Vista Inicial", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_despues_seleccion.png"):
+                                with col2:
+                                    st.image("powerbi_despues_seleccion.png", caption="Tras Selección", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_final.png"):
+                                with col3:
+                                    st.image("powerbi_final.png", caption="Vista Final", use_column_width=True)
+                    else:
+                        st.error("❌ No se pudieron extraer los datos de Power BI")
+            else:
+                st.error("❌ No se pudieron extraer los valores del Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+    
+    # Ayuda
+    st.markdown("---")
+    with st.expander("ℹ️ Instrucciones de Uso"):
+        st.markdown("""
+        **Proceso:**
+        1. Cargar archivo Excel con formato `CrptTransaccionesTotal DD-MM-YYYY gopass`
+        2. Detección automática de fecha
+        3. Extracción de valores del Excel (columna AK)
+        4. Conexión con Power BI y selección de fecha
+        5. Extracción de datos de PEAJE ALVARADO
+        6. Comparación y validación
+        
+        **Mejoras v3.0:**
+        - ✅ Estrategias de extracción adaptadas de APP GICA
+        - ✅ Búsqueda múltiple en contenedores
+        - ✅ Identificación inteligente de valores y pasos
+        - ✅ Filtrado por rangos numéricos razonables
+        - ✅ Capturas de pantalla del proceso
+        """)
+
+if __name__ == "__main__":
+    main()
+    
+    st.markdown("---")
+    st.markdown('<div style="text-align: center;">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit | v3.0</div>', unsafe_allow_html=True)
+, '').replace(',', '').replace('.', '')
+                            # Verificar si es formato con coma decimal: $10.485.400,00
+                            if ',' in valor_texto and valor_texto.count(',') == 1:
+                                # Formato con coma decimal
+                                partes = valor_texto.replace('
+
+def extract_powerbi_data(fecha_objetivo):
+    """Función principal para extraer datos de Power BI - MEJORADA"""
+    
+    REPORT_URL = "https://app.powerbi.com/view?r=eyJrIjoiMDA5OGE5MTQtNjQ0MC00ZTdjLWJmNDItNGZhYmQxOWE5ZTk3IiwidCI6ImY5MTdlZDFiLWI0MDMtNDljNS1iODBiLWJhYWUzY2UwMzc1YSJ9"
+    
+    driver = setup_driver()
+    if not driver:
+        return None, None
+    
+    try:
+        # 1. Navegar al reporte
+        with st.spinner("🌐 Conectando con Power BI..."):
+            driver.get(REPORT_URL)
+            time.sleep(10)
+        
+        # 2. Tomar screenshot inicial
+        driver.save_screenshot("powerbi_inicial.png")
+        
+        # 3. Hacer clic en la conciliación específica
+        if not click_conciliacion_date(driver, fecha_objetivo):
+            return None, None
+        
+        # 4. Esperar a que cargue la selección
+        time.sleep(5)
+        driver.save_screenshot("powerbi_despues_seleccion.png")
+        
+        # 5. Buscar datos de PEAJE ALVARADO
+        with st.spinner("🔍 Extrayendo datos de PEAJE ALVARADO..."):
+            valor_power_bi, pasos_power_bi = find_alvarado_card(driver)
+        
+        # 6. Tomar screenshot final
+        driver.save_screenshot("powerbi_final.png")
+        
+        return valor_power_bi, pasos_power_bi
+        
+    except Exception as e:
+        st.error(f"❌ Error durante la extracción: {str(e)}")
+        return None, None
+    finally:
+        driver.quit()
+
+def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
+    """Compara los valores y determina si coinciden"""
+    try:
+        diferencia_valor = abs(valor_excel - valor_power_bi) if valor_power_bi else valor_excel
+        diferencia_pasos = abs(pasos_excel - pasos_power_bi) if pasos_power_bi else pasos_excel
+        
+        coinciden_valor = diferencia_valor < 1.0
+        coinciden_pasos = diferencia_pasos == 0
+        
+        return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+        
+    except Exception as e:
+        st.error(f"❌ Error comparando valores: {e}")
+        return False, False, 0, 0
+
+# ===== INTERFAZ PRINCIPAL =====
+
+def main():
+    st.title("💰 Validador Power BI - PEAJE ALVARADO")
+    st.markdown("---")
+    
+    # Sidebar
+    st.sidebar.header("📋 Información del Reporte")
+    st.sidebar.info("""
+    **Objetivo:**
+    - Validar conciliaciones entre Excel y Power BI
+    - Extraer datos de PEAJE ALVARADO
+    - Comparar valores y número de pasos
+    
+    **Estado:** ✅ Mejorado con estrategias de APP GICA
+    **Versión:** v3.0 - Extracción Mejorada
+    """)
+    
+    st.sidebar.header("🛠️ Estado del Sistema")
+    st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
+    st.sidebar.info(f"✅ Pandas {pd.__version__}")
+    
+    # Cargar archivo Excel
+    st.subheader("📁 Cargar Archivo Excel")
+    uploaded_file = st.file_uploader(
+        "Selecciona el archivo Excel (CrptTransaccionesTotal DD-MM-YYYY gopass)", 
+        type=['xlsx', 'xls']
+    )
+    
+    if uploaded_file is not None:
+        # Extraer fecha del nombre
+        fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
+        
+        if fecha_validacion:
+            st.success(f"📅 Fecha detectada: {fecha_validacion}")
+        else:
+            st.warning("⚠️ No se pudo detectar la fecha")
+            fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+        
+        if fecha_validacion:
+            # Procesar Excel
+            with st.spinner("📊 Procesando archivo Excel..."):
+                valor_excel, pasos_excel = procesar_excel(uploaded_file)
+            
+            if valor_excel > 0 and pasos_excel > 0:
+                # Mostrar valores del Excel
+                st.markdown("### 📊 Valores Extraídos del Excel")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💰 Valor a Pagar", f"${valor_excel:,.0f}")
+                with col2:
+                    st.metric("👣 Número de Pasos", f"{pasos_excel}")
+                
+                st.markdown("---")
+                
+                # Botón para extraer de Power BI
+                if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
+                    with st.spinner("🌐 Extrayendo datos de Power BI..."):
+                        valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
+                    
+                    if valor_power_bi is not None and pasos_power_bi is not None:
+                        # Mostrar resultados de Power BI
+                        st.markdown("### 📊 Valores Extraídos de Power BI")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            st.metric("💰 Valor a Pagar (Power BI)", f"${valor_power_bi:,.0f}")
+                        with col4:
+                            st.metric("👣 Número de Pasos (Power BI)", f"{pasos_power_bi}")
+                        
+                        st.markdown("---")
+                        
+                        # Comparar
+                        st.markdown("### 📊 Resultado de la Validación")
+                        
+                        coinciden_valor, coinciden_pasos, dif_valor, dif_pasos = comparar_valores(
+                            valor_excel, valor_power_bi, pasos_excel, pasos_power_bi
+                        )
+                        
+                        if coinciden_valor and coinciden_pasos:
+                            st.success("🎉 ✅ TODOS LOS VALORES COINCIDEN")
+                            st.balloons()
+                        else:
+                            if not coinciden_valor:
+                                st.error(f"❌ DIFERENCIA EN VALOR: ${dif_valor:,.0f}")
+                            if not coinciden_pasos:
+                                st.error(f"❌ DIFERENCIA EN PASOS: {dif_pasos} pasos")
+                        
+                        # Tabla resumen
+                        st.markdown("### 📋 Resumen de Comparación")
+                        
+                        datos = {
+                            'Concepto': ['Valor a Pagar', 'Número de Pasos'],
+                            'Excel': [f"${valor_excel:,.0f}", f"{pasos_excel}"],
+                            'Power BI': [f"${valor_power_bi:,.0f}", f"{pasos_power_bi}"],
+                            'Resultado': [
+                                '✅ COINCIDE' if coinciden_valor else f'❌ DIFERENCIA: ${dif_valor:,.0f}',
+                                '✅ COINCIDE' if coinciden_pasos else f'❌ DIFERENCIA: {dif_pasos} pasos'
+                            ]
+                        }
+                        
+                        df = pd.DataFrame(datos)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                        
+                        # Screenshots
+                        with st.expander("📸 Ver Capturas del Proceso"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            if os.path.exists("powerbi_inicial.png"):
+                                with col1:
+                                    st.image("powerbi_inicial.png", caption="Vista Inicial", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_despues_seleccion.png"):
+                                with col2:
+                                    st.image("powerbi_despues_seleccion.png", caption="Tras Selección", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_final.png"):
+                                with col3:
+                                    st.image("powerbi_final.png", caption="Vista Final", use_column_width=True)
+                    else:
+                        st.error("❌ No se pudieron extraer los datos de Power BI")
+            else:
+                st.error("❌ No se pudieron extraer los valores del Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+    
+    # Ayuda
+    st.markdown("---")
+    with st.expander("ℹ️ Instrucciones de Uso"):
+        st.markdown("""
+        **Proceso:**
+        1. Cargar archivo Excel con formato `CrptTransaccionesTotal DD-MM-YYYY gopass`
+        2. Detección automática de fecha
+        3. Extracción de valores del Excel (columna AK)
+        4. Conexión con Power BI y selección de fecha
+        5. Extracción de datos de PEAJE ALVARADO
+        6. Comparación y validación
+        
+        **Mejoras v3.0:**
+        - ✅ Estrategias de extracción adaptadas de APP GICA
+        - ✅ Búsqueda múltiple en contenedores
+        - ✅ Identificación inteligente de valores y pasos
+        - ✅ Filtrado por rangos numéricos razonables
+        - ✅ Capturas de pantalla del proceso
+        """)
+
+if __name__ == "__main__":
+    main()
+    
+    st.markdown("---")
+    st.markdown('<div style="text-align: center;">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit | v3.0</div>', unsafe_allow_html=True)
+, '').split(',')
+                                valor_limpio = partes[0].replace('.', '')
+                            
+                            if valor_limpio.isdigit():
+                                valor = int(valor_limpio)
+                                st.success(f"💰 Valor encontrado: ${valor:,.0f}")
+                        
+                        # Extraer PASOS: primer número pequeño (< 10,000) después de PEAJE ALVARADO
+                        pasos = None
+                        numeros_texto = re.findall(r'\b\d+\b', alvarado_section)
+                        st.info(f"🔢 Números encontrados: {numeros_texto}")
+                        
+                        for num_str in numeros_texto:
+                            if num_str.isdigit():
+                                num_val = int(num_str)
+                                # Pasos típicamente entre 100 y 10,000
+                                if 100 < num_val < 10000:
+                                    pasos = num_val
+                                    st.success(f"👣 Pasos encontrados: {pasos}")
                                     break
+                        
+                        # Si encontramos ambos valores, retornar
+                        if valor and pasos:
+                            st.success(f"✅ Extracción exitosa: Pasos={pasos}, Valor=${valor:,.0f}")
+                            return valor, pasos
+                        else:
+                            st.warning(f"⚠️ Extracción parcial: Valor={valor}, Pasos={pasos}")
                             
-                            valor = None
-                            for val in reversed(valores_encontrados):
-                                if val > 100000:
-                                    valor = val
-                                    break
+        except Exception as e:
+            st.warning(f"⚠️ Estrategia principal falló: {e}")
+        
+        # ESTRATEGIA 2: Buscar en el mismo contenedor del título
+        try:
+            container = titulo_element.find_element(By.XPATH, "./..")
+            all_text = container.text
+            st.info(f"📝 Texto del contenedor: {all_text}")
+            
+            # Buscar valor con $
+            valor = None
+            valor_match = re.search(r'\$[\d,\.]+', all_text)
+            if valor_match:
+                valor_texto = valor_match.group(0)
+                valor_limpio = valor_texto.replace('
+
+def extract_powerbi_data(fecha_objetivo):
+    """Función principal para extraer datos de Power BI - MEJORADA"""
+    
+    REPORT_URL = "https://app.powerbi.com/view?r=eyJrIjoiMDA5OGE5MTQtNjQ0MC00ZTdjLWJmNDItNGZhYmQxOWE5ZTk3IiwidCI6ImY5MTdlZDFiLWI0MDMtNDljNS1iODBiLWJhYWUzY2UwMzc1YSJ9"
+    
+    driver = setup_driver()
+    if not driver:
+        return None, None
+    
+    try:
+        # 1. Navegar al reporte
+        with st.spinner("🌐 Conectando con Power BI..."):
+            driver.get(REPORT_URL)
+            time.sleep(10)
+        
+        # 2. Tomar screenshot inicial
+        driver.save_screenshot("powerbi_inicial.png")
+        
+        # 3. Hacer clic en la conciliación específica
+        if not click_conciliacion_date(driver, fecha_objetivo):
+            return None, None
+        
+        # 4. Esperar a que cargue la selección
+        time.sleep(5)
+        driver.save_screenshot("powerbi_despues_seleccion.png")
+        
+        # 5. Buscar datos de PEAJE ALVARADO
+        with st.spinner("🔍 Extrayendo datos de PEAJE ALVARADO..."):
+            valor_power_bi, pasos_power_bi = find_alvarado_card(driver)
+        
+        # 6. Tomar screenshot final
+        driver.save_screenshot("powerbi_final.png")
+        
+        return valor_power_bi, pasos_power_bi
+        
+    except Exception as e:
+        st.error(f"❌ Error durante la extracción: {str(e)}")
+        return None, None
+    finally:
+        driver.quit()
+
+def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
+    """Compara los valores y determina si coinciden"""
+    try:
+        diferencia_valor = abs(valor_excel - valor_power_bi) if valor_power_bi else valor_excel
+        diferencia_pasos = abs(pasos_excel - pasos_power_bi) if pasos_power_bi else pasos_excel
+        
+        coinciden_valor = diferencia_valor < 1.0
+        coinciden_pasos = diferencia_pasos == 0
+        
+        return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+        
+    except Exception as e:
+        st.error(f"❌ Error comparando valores: {e}")
+        return False, False, 0, 0
+
+# ===== INTERFAZ PRINCIPAL =====
+
+def main():
+    st.title("💰 Validador Power BI - PEAJE ALVARADO")
+    st.markdown("---")
+    
+    # Sidebar
+    st.sidebar.header("📋 Información del Reporte")
+    st.sidebar.info("""
+    **Objetivo:**
+    - Validar conciliaciones entre Excel y Power BI
+    - Extraer datos de PEAJE ALVARADO
+    - Comparar valores y número de pasos
+    
+    **Estado:** ✅ Mejorado con estrategias de APP GICA
+    **Versión:** v3.0 - Extracción Mejorada
+    """)
+    
+    st.sidebar.header("🛠️ Estado del Sistema")
+    st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
+    st.sidebar.info(f"✅ Pandas {pd.__version__}")
+    
+    # Cargar archivo Excel
+    st.subheader("📁 Cargar Archivo Excel")
+    uploaded_file = st.file_uploader(
+        "Selecciona el archivo Excel (CrptTransaccionesTotal DD-MM-YYYY gopass)", 
+        type=['xlsx', 'xls']
+    )
+    
+    if uploaded_file is not None:
+        # Extraer fecha del nombre
+        fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
+        
+        if fecha_validacion:
+            st.success(f"📅 Fecha detectada: {fecha_validacion}")
+        else:
+            st.warning("⚠️ No se pudo detectar la fecha")
+            fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+        
+        if fecha_validacion:
+            # Procesar Excel
+            with st.spinner("📊 Procesando archivo Excel..."):
+                valor_excel, pasos_excel = procesar_excel(uploaded_file)
+            
+            if valor_excel > 0 and pasos_excel > 0:
+                # Mostrar valores del Excel
+                st.markdown("### 📊 Valores Extraídos del Excel")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💰 Valor a Pagar", f"${valor_excel:,.0f}")
+                with col2:
+                    st.metric("👣 Número de Pasos", f"{pasos_excel}")
+                
+                st.markdown("---")
+                
+                # Botón para extraer de Power BI
+                if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
+                    with st.spinner("🌐 Extrayendo datos de Power BI..."):
+                        valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
+                    
+                    if valor_power_bi is not None and pasos_power_bi is not None:
+                        # Mostrar resultados de Power BI
+                        st.markdown("### 📊 Valores Extraídos de Power BI")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            st.metric("💰 Valor a Pagar (Power BI)", f"${valor_power_bi:,.0f}")
+                        with col4:
+                            st.metric("👣 Número de Pasos (Power BI)", f"{pasos_power_bi}")
+                        
+                        st.markdown("---")
+                        
+                        # Comparar
+                        st.markdown("### 📊 Resultado de la Validación")
+                        
+                        coinciden_valor, coinciden_pasos, dif_valor, dif_pasos = comparar_valores(
+                            valor_excel, valor_power_bi, pasos_excel, pasos_power_bi
+                        )
+                        
+                        if coinciden_valor and coinciden_pasos:
+                            st.success("🎉 ✅ TODOS LOS VALORES COINCIDEN")
+                            st.balloons()
+                        else:
+                            if not coinciden_valor:
+                                st.error(f"❌ DIFERENCIA EN VALOR: ${dif_valor:,.0f}")
+                            if not coinciden_pasos:
+                                st.error(f"❌ DIFERENCIA EN PASOS: {dif_pasos} pasos")
+                        
+                        # Tabla resumen
+                        st.markdown("### 📋 Resumen de Comparación")
+                        
+                        datos = {
+                            'Concepto': ['Valor a Pagar', 'Número de Pasos'],
+                            'Excel': [f"${valor_excel:,.0f}", f"{pasos_excel}"],
+                            'Power BI': [f"${valor_power_bi:,.0f}", f"{pasos_power_bi}"],
+                            'Resultado': [
+                                '✅ COINCIDE' if coinciden_valor else f'❌ DIFERENCIA: ${dif_valor:,.0f}',
+                                '✅ COINCIDE' if coinciden_pasos else f'❌ DIFERENCIA: {dif_pasos} pasos'
+                            ]
+                        }
+                        
+                        df = pd.DataFrame(datos)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                        
+                        # Screenshots
+                        with st.expander("📸 Ver Capturas del Proceso"):
+                            col1, col2, col3 = st.columns(3)
                             
-                            if pasos and valor:
-                                st.success(f"✅ Estrategia 3: Pasos={pasos}, Valor=${valor:,.0f}")
-                                return valor, pasos
+                            if os.path.exists("powerbi_inicial.png"):
+                                with col1:
+                                    st.image("powerbi_inicial.png", caption="Vista Inicial", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_despues_seleccion.png"):
+                                with col2:
+                                    st.image("powerbi_despues_seleccion.png", caption="Tras Selección", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_final.png"):
+                                with col3:
+                                    st.image("powerbi_final.png", caption="Vista Final", use_column_width=True)
+                    else:
+                        st.error("❌ No se pudieron extraer los datos de Power BI")
+            else:
+                st.error("❌ No se pudieron extraer los valores del Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+    
+    # Ayuda
+    st.markdown("---")
+    with st.expander("ℹ️ Instrucciones de Uso"):
+        st.markdown("""
+        **Proceso:**
+        1. Cargar archivo Excel con formato `CrptTransaccionesTotal DD-MM-YYYY gopass`
+        2. Detección automática de fecha
+        3. Extracción de valores del Excel (columna AK)
+        4. Conexión con Power BI y selección de fecha
+        5. Extracción de datos de PEAJE ALVARADO
+        6. Comparación y validación
+        
+        **Mejoras v3.0:**
+        - ✅ Estrategias de extracción adaptadas de APP GICA
+        - ✅ Búsqueda múltiple en contenedores
+        - ✅ Identificación inteligente de valores y pasos
+        - ✅ Filtrado por rangos numéricos razonables
+        - ✅ Capturas de pantalla del proceso
+        """)
+
+if __name__ == "__main__":
+    main()
+    
+    st.markdown("---")
+    st.markdown('<div style="text-align: center;">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit | v3.0</div>', unsafe_allow_html=True)
+, '').replace(',', '').replace('.', '')
+                if ',' in valor_texto and valor_texto.count(',') == 1:
+                    partes = valor_texto.replace('
+
+def extract_powerbi_data(fecha_objetivo):
+    """Función principal para extraer datos de Power BI - MEJORADA"""
+    
+    REPORT_URL = "https://app.powerbi.com/view?r=eyJrIjoiMDA5OGE5MTQtNjQ0MC00ZTdjLWJmNDItNGZhYmQxOWE5ZTk3IiwidCI6ImY5MTdlZDFiLWI0MDMtNDljNS1iODBiLWJhYWUzY2UwMzc1YSJ9"
+    
+    driver = setup_driver()
+    if not driver:
+        return None, None
+    
+    try:
+        # 1. Navegar al reporte
+        with st.spinner("🌐 Conectando con Power BI..."):
+            driver.get(REPORT_URL)
+            time.sleep(10)
+        
+        # 2. Tomar screenshot inicial
+        driver.save_screenshot("powerbi_inicial.png")
+        
+        # 3. Hacer clic en la conciliación específica
+        if not click_conciliacion_date(driver, fecha_objetivo):
+            return None, None
+        
+        # 4. Esperar a que cargue la selección
+        time.sleep(5)
+        driver.save_screenshot("powerbi_despues_seleccion.png")
+        
+        # 5. Buscar datos de PEAJE ALVARADO
+        with st.spinner("🔍 Extrayendo datos de PEAJE ALVARADO..."):
+            valor_power_bi, pasos_power_bi = find_alvarado_card(driver)
+        
+        # 6. Tomar screenshot final
+        driver.save_screenshot("powerbi_final.png")
+        
+        return valor_power_bi, pasos_power_bi
+        
+    except Exception as e:
+        st.error(f"❌ Error durante la extracción: {str(e)}")
+        return None, None
+    finally:
+        driver.quit()
+
+def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
+    """Compara los valores y determina si coinciden"""
+    try:
+        diferencia_valor = abs(valor_excel - valor_power_bi) if valor_power_bi else valor_excel
+        diferencia_pasos = abs(pasos_excel - pasos_power_bi) if pasos_power_bi else pasos_excel
+        
+        coinciden_valor = diferencia_valor < 1.0
+        coinciden_pasos = diferencia_pasos == 0
+        
+        return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+        
+    except Exception as e:
+        st.error(f"❌ Error comparando valores: {e}")
+        return False, False, 0, 0
+
+# ===== INTERFAZ PRINCIPAL =====
+
+def main():
+    st.title("💰 Validador Power BI - PEAJE ALVARADO")
+    st.markdown("---")
+    
+    # Sidebar
+    st.sidebar.header("📋 Información del Reporte")
+    st.sidebar.info("""
+    **Objetivo:**
+    - Validar conciliaciones entre Excel y Power BI
+    - Extraer datos de PEAJE ALVARADO
+    - Comparar valores y número de pasos
+    
+    **Estado:** ✅ Mejorado con estrategias de APP GICA
+    **Versión:** v3.0 - Extracción Mejorada
+    """)
+    
+    st.sidebar.header("🛠️ Estado del Sistema")
+    st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
+    st.sidebar.info(f"✅ Pandas {pd.__version__}")
+    
+    # Cargar archivo Excel
+    st.subheader("📁 Cargar Archivo Excel")
+    uploaded_file = st.file_uploader(
+        "Selecciona el archivo Excel (CrptTransaccionesTotal DD-MM-YYYY gopass)", 
+        type=['xlsx', 'xls']
+    )
+    
+    if uploaded_file is not None:
+        # Extraer fecha del nombre
+        fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
+        
+        if fecha_validacion:
+            st.success(f"📅 Fecha detectada: {fecha_validacion}")
+        else:
+            st.warning("⚠️ No se pudo detectar la fecha")
+            fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+        
+        if fecha_validacion:
+            # Procesar Excel
+            with st.spinner("📊 Procesando archivo Excel..."):
+                valor_excel, pasos_excel = procesar_excel(uploaded_file)
+            
+            if valor_excel > 0 and pasos_excel > 0:
+                # Mostrar valores del Excel
+                st.markdown("### 📊 Valores Extraídos del Excel")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💰 Valor a Pagar", f"${valor_excel:,.0f}")
+                with col2:
+                    st.metric("👣 Número de Pasos", f"{pasos_excel}")
+                
+                st.markdown("---")
+                
+                # Botón para extraer de Power BI
+                if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
+                    with st.spinner("🌐 Extrayendo datos de Power BI..."):
+                        valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
+                    
+                    if valor_power_bi is not None and pasos_power_bi is not None:
+                        # Mostrar resultados de Power BI
+                        st.markdown("### 📊 Valores Extraídos de Power BI")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            st.metric("💰 Valor a Pagar (Power BI)", f"${valor_power_bi:,.0f}")
+                        with col4:
+                            st.metric("👣 Número de Pasos (Power BI)", f"{pasos_power_bi}")
+                        
+                        st.markdown("---")
+                        
+                        # Comparar
+                        st.markdown("### 📊 Resultado de la Validación")
+                        
+                        coinciden_valor, coinciden_pasos, dif_valor, dif_pasos = comparar_valores(
+                            valor_excel, valor_power_bi, pasos_excel, pasos_power_bi
+                        )
+                        
+                        if coinciden_valor and coinciden_pasos:
+                            st.success("🎉 ✅ TODOS LOS VALORES COINCIDEN")
+                            st.balloons()
+                        else:
+                            if not coinciden_valor:
+                                st.error(f"❌ DIFERENCIA EN VALOR: ${dif_valor:,.0f}")
+                            if not coinciden_pasos:
+                                st.error(f"❌ DIFERENCIA EN PASOS: {dif_pasos} pasos")
+                        
+                        # Tabla resumen
+                        st.markdown("### 📋 Resumen de Comparación")
+                        
+                        datos = {
+                            'Concepto': ['Valor a Pagar', 'Número de Pasos'],
+                            'Excel': [f"${valor_excel:,.0f}", f"{pasos_excel}"],
+                            'Power BI': [f"${valor_power_bi:,.0f}", f"{pasos_power_bi}"],
+                            'Resultado': [
+                                '✅ COINCIDE' if coinciden_valor else f'❌ DIFERENCIA: ${dif_valor:,.0f}',
+                                '✅ COINCIDE' if coinciden_pasos else f'❌ DIFERENCIA: {dif_pasos} pasos'
+                            ]
+                        }
+                        
+                        df = pd.DataFrame(datos)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                        
+                        # Screenshots
+                        with st.expander("📸 Ver Capturas del Proceso"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            if os.path.exists("powerbi_inicial.png"):
+                                with col1:
+                                    st.image("powerbi_inicial.png", caption="Vista Inicial", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_despues_seleccion.png"):
+                                with col2:
+                                    st.image("powerbi_despues_seleccion.png", caption="Tras Selección", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_final.png"):
+                                with col3:
+                                    st.image("powerbi_final.png", caption="Vista Final", use_column_width=True)
+                    else:
+                        st.error("❌ No se pudieron extraer los datos de Power BI")
+            else:
+                st.error("❌ No se pudieron extraer los valores del Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+    
+    # Ayuda
+    st.markdown("---")
+    with st.expander("ℹ️ Instrucciones de Uso"):
+        st.markdown("""
+        **Proceso:**
+        1. Cargar archivo Excel con formato `CrptTransaccionesTotal DD-MM-YYYY gopass`
+        2. Detección automática de fecha
+        3. Extracción de valores del Excel (columna AK)
+        4. Conexión con Power BI y selección de fecha
+        5. Extracción de datos de PEAJE ALVARADO
+        6. Comparación y validación
+        
+        **Mejoras v3.0:**
+        - ✅ Estrategias de extracción adaptadas de APP GICA
+        - ✅ Búsqueda múltiple en contenedores
+        - ✅ Identificación inteligente de valores y pasos
+        - ✅ Filtrado por rangos numéricos razonables
+        - ✅ Capturas de pantalla del proceso
+        """)
+
+if __name__ == "__main__":
+    main()
+    
+    st.markdown("---")
+    st.markdown('<div style="text-align: center;">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit | v3.0</div>', unsafe_allow_html=True)
+, '').split(',')
+                    valor_limpio = partes[0].replace('.', '')
+                
+                if valor_limpio.isdigit():
+                    valor = int(valor_limpio)
+                    st.success(f"💰 Valor (estrategia 2): ${valor:,.0f}")
+            
+            # Buscar pasos
+            pasos = None
+            numeros = re.findall(r'\b\d+\b', all_text)
+            for num_str in numeros:
+                if num_str.isdigit():
+                    num_val = int(num_str)
+                    if 100 < num_val < 10000:
+                        pasos = num_val
+                        st.success(f"👣 Pasos (estrategia 2): {pasos}")
+                        break
+            
+            if valor and pasos:
+                return valor, pasos
+                
+        except Exception as e:
+            st.warning(f"⚠️ Estrategia 2 falló: {e}")
+        
+        # ESTRATEGIA 3: Buscar en elementos hermanos
+        try:
+            parent = titulo_element.find_element(By.XPATH, "./..")
+            siblings = parent.find_elements(By.XPATH, "./*")
+            
+            valor = None
+            pasos = None
+            
+            for sibling in siblings:
+                if sibling != titulo_element and sibling.is_displayed():
+                    texto = sibling.text.strip()
+                    
+                    # Buscar valor con $
+                    if not valor and '
+
+def extract_powerbi_data(fecha_objetivo):
+    """Función principal para extraer datos de Power BI - MEJORADA"""
+    
+    REPORT_URL = "https://app.powerbi.com/view?r=eyJrIjoiMDA5OGE5MTQtNjQ0MC00ZTdjLWJmNDItNGZhYmQxOWE5ZTk3IiwidCI6ImY5MTdlZDFiLWI0MDMtNDljNS1iODBiLWJhYWUzY2UwMzc1YSJ9"
+    
+    driver = setup_driver()
+    if not driver:
+        return None, None
+    
+    try:
+        # 1. Navegar al reporte
+        with st.spinner("🌐 Conectando con Power BI..."):
+            driver.get(REPORT_URL)
+            time.sleep(10)
+        
+        # 2. Tomar screenshot inicial
+        driver.save_screenshot("powerbi_inicial.png")
+        
+        # 3. Hacer clic en la conciliación específica
+        if not click_conciliacion_date(driver, fecha_objetivo):
+            return None, None
+        
+        # 4. Esperar a que cargue la selección
+        time.sleep(5)
+        driver.save_screenshot("powerbi_despues_seleccion.png")
+        
+        # 5. Buscar datos de PEAJE ALVARADO
+        with st.spinner("🔍 Extrayendo datos de PEAJE ALVARADO..."):
+            valor_power_bi, pasos_power_bi = find_alvarado_card(driver)
+        
+        # 6. Tomar screenshot final
+        driver.save_screenshot("powerbi_final.png")
+        
+        return valor_power_bi, pasos_power_bi
+        
+    except Exception as e:
+        st.error(f"❌ Error durante la extracción: {str(e)}")
+        return None, None
+    finally:
+        driver.quit()
+
+def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
+    """Compara los valores y determina si coinciden"""
+    try:
+        diferencia_valor = abs(valor_excel - valor_power_bi) if valor_power_bi else valor_excel
+        diferencia_pasos = abs(pasos_excel - pasos_power_bi) if pasos_power_bi else pasos_excel
+        
+        coinciden_valor = diferencia_valor < 1.0
+        coinciden_pasos = diferencia_pasos == 0
+        
+        return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+        
+    except Exception as e:
+        st.error(f"❌ Error comparando valores: {e}")
+        return False, False, 0, 0
+
+# ===== INTERFAZ PRINCIPAL =====
+
+def main():
+    st.title("💰 Validador Power BI - PEAJE ALVARADO")
+    st.markdown("---")
+    
+    # Sidebar
+    st.sidebar.header("📋 Información del Reporte")
+    st.sidebar.info("""
+    **Objetivo:**
+    - Validar conciliaciones entre Excel y Power BI
+    - Extraer datos de PEAJE ALVARADO
+    - Comparar valores y número de pasos
+    
+    **Estado:** ✅ Mejorado con estrategias de APP GICA
+    **Versión:** v3.0 - Extracción Mejorada
+    """)
+    
+    st.sidebar.header("🛠️ Estado del Sistema")
+    st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
+    st.sidebar.info(f"✅ Pandas {pd.__version__}")
+    
+    # Cargar archivo Excel
+    st.subheader("📁 Cargar Archivo Excel")
+    uploaded_file = st.file_uploader(
+        "Selecciona el archivo Excel (CrptTransaccionesTotal DD-MM-YYYY gopass)", 
+        type=['xlsx', 'xls']
+    )
+    
+    if uploaded_file is not None:
+        # Extraer fecha del nombre
+        fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
+        
+        if fecha_validacion:
+            st.success(f"📅 Fecha detectada: {fecha_validacion}")
+        else:
+            st.warning("⚠️ No se pudo detectar la fecha")
+            fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+        
+        if fecha_validacion:
+            # Procesar Excel
+            with st.spinner("📊 Procesando archivo Excel..."):
+                valor_excel, pasos_excel = procesar_excel(uploaded_file)
+            
+            if valor_excel > 0 and pasos_excel > 0:
+                # Mostrar valores del Excel
+                st.markdown("### 📊 Valores Extraídos del Excel")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💰 Valor a Pagar", f"${valor_excel:,.0f}")
+                with col2:
+                    st.metric("👣 Número de Pasos", f"{pasos_excel}")
+                
+                st.markdown("---")
+                
+                # Botón para extraer de Power BI
+                if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
+                    with st.spinner("🌐 Extrayendo datos de Power BI..."):
+                        valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
+                    
+                    if valor_power_bi is not None and pasos_power_bi is not None:
+                        # Mostrar resultados de Power BI
+                        st.markdown("### 📊 Valores Extraídos de Power BI")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            st.metric("💰 Valor a Pagar (Power BI)", f"${valor_power_bi:,.0f}")
+                        with col4:
+                            st.metric("👣 Número de Pasos (Power BI)", f"{pasos_power_bi}")
+                        
+                        st.markdown("---")
+                        
+                        # Comparar
+                        st.markdown("### 📊 Resultado de la Validación")
+                        
+                        coinciden_valor, coinciden_pasos, dif_valor, dif_pasos = comparar_valores(
+                            valor_excel, valor_power_bi, pasos_excel, pasos_power_bi
+                        )
+                        
+                        if coinciden_valor and coinciden_pasos:
+                            st.success("🎉 ✅ TODOS LOS VALORES COINCIDEN")
+                            st.balloons()
+                        else:
+                            if not coinciden_valor:
+                                st.error(f"❌ DIFERENCIA EN VALOR: ${dif_valor:,.0f}")
+                            if not coinciden_pasos:
+                                st.error(f"❌ DIFERENCIA EN PASOS: {dif_pasos} pasos")
+                        
+                        # Tabla resumen
+                        st.markdown("### 📋 Resumen de Comparación")
+                        
+                        datos = {
+                            'Concepto': ['Valor a Pagar', 'Número de Pasos'],
+                            'Excel': [f"${valor_excel:,.0f}", f"{pasos_excel}"],
+                            'Power BI': [f"${valor_power_bi:,.0f}", f"{pasos_power_bi}"],
+                            'Resultado': [
+                                '✅ COINCIDE' if coinciden_valor else f'❌ DIFERENCIA: ${dif_valor:,.0f}',
+                                '✅ COINCIDE' if coinciden_pasos else f'❌ DIFERENCIA: {dif_pasos} pasos'
+                            ]
+                        }
+                        
+                        df = pd.DataFrame(datos)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                        
+                        # Screenshots
+                        with st.expander("📸 Ver Capturas del Proceso"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            if os.path.exists("powerbi_inicial.png"):
+                                with col1:
+                                    st.image("powerbi_inicial.png", caption="Vista Inicial", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_despues_seleccion.png"):
+                                with col2:
+                                    st.image("powerbi_despues_seleccion.png", caption="Tras Selección", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_final.png"):
+                                with col3:
+                                    st.image("powerbi_final.png", caption="Vista Final", use_column_width=True)
+                    else:
+                        st.error("❌ No se pudieron extraer los datos de Power BI")
+            else:
+                st.error("❌ No se pudieron extraer los valores del Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+    
+    # Ayuda
+    st.markdown("---")
+    with st.expander("ℹ️ Instrucciones de Uso"):
+        st.markdown("""
+        **Proceso:**
+        1. Cargar archivo Excel con formato `CrptTransaccionesTotal DD-MM-YYYY gopass`
+        2. Detección automática de fecha
+        3. Extracción de valores del Excel (columna AK)
+        4. Conexión con Power BI y selección de fecha
+        5. Extracción de datos de PEAJE ALVARADO
+        6. Comparación y validación
+        
+        **Mejoras v3.0:**
+        - ✅ Estrategias de extracción adaptadas de APP GICA
+        - ✅ Búsqueda múltiple en contenedores
+        - ✅ Identificación inteligente de valores y pasos
+        - ✅ Filtrado por rangos numéricos razonables
+        - ✅ Capturas de pantalla del proceso
+        """)
+
+if __name__ == "__main__":
+    main()
+    
+    st.markdown("---")
+    st.markdown('<div style="text-align: center;">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit | v3.0</div>', unsafe_allow_html=True)
+ in texto:
+                        valor_match = re.search(r'\$[\d,\.]+', texto)
+                        if valor_match:
+                            valor_texto = valor_match.group(0)
+                            valor_limpio = valor_texto.replace('
+
+def extract_powerbi_data(fecha_objetivo):
+    """Función principal para extraer datos de Power BI - MEJORADA"""
+    
+    REPORT_URL = "https://app.powerbi.com/view?r=eyJrIjoiMDA5OGE5MTQtNjQ0MC00ZTdjLWJmNDItNGZhYmQxOWE5ZTk3IiwidCI6ImY5MTdlZDFiLWI0MDMtNDljNS1iODBiLWJhYWUzY2UwMzc1YSJ9"
+    
+    driver = setup_driver()
+    if not driver:
+        return None, None
+    
+    try:
+        # 1. Navegar al reporte
+        with st.spinner("🌐 Conectando con Power BI..."):
+            driver.get(REPORT_URL)
+            time.sleep(10)
+        
+        # 2. Tomar screenshot inicial
+        driver.save_screenshot("powerbi_inicial.png")
+        
+        # 3. Hacer clic en la conciliación específica
+        if not click_conciliacion_date(driver, fecha_objetivo):
+            return None, None
+        
+        # 4. Esperar a que cargue la selección
+        time.sleep(5)
+        driver.save_screenshot("powerbi_despues_seleccion.png")
+        
+        # 5. Buscar datos de PEAJE ALVARADO
+        with st.spinner("🔍 Extrayendo datos de PEAJE ALVARADO..."):
+            valor_power_bi, pasos_power_bi = find_alvarado_card(driver)
+        
+        # 6. Tomar screenshot final
+        driver.save_screenshot("powerbi_final.png")
+        
+        return valor_power_bi, pasos_power_bi
+        
+    except Exception as e:
+        st.error(f"❌ Error durante la extracción: {str(e)}")
+        return None, None
+    finally:
+        driver.quit()
+
+def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
+    """Compara los valores y determina si coinciden"""
+    try:
+        diferencia_valor = abs(valor_excel - valor_power_bi) if valor_power_bi else valor_excel
+        diferencia_pasos = abs(pasos_excel - pasos_power_bi) if pasos_power_bi else pasos_excel
+        
+        coinciden_valor = diferencia_valor < 1.0
+        coinciden_pasos = diferencia_pasos == 0
+        
+        return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+        
+    except Exception as e:
+        st.error(f"❌ Error comparando valores: {e}")
+        return False, False, 0, 0
+
+# ===== INTERFAZ PRINCIPAL =====
+
+def main():
+    st.title("💰 Validador Power BI - PEAJE ALVARADO")
+    st.markdown("---")
+    
+    # Sidebar
+    st.sidebar.header("📋 Información del Reporte")
+    st.sidebar.info("""
+    **Objetivo:**
+    - Validar conciliaciones entre Excel y Power BI
+    - Extraer datos de PEAJE ALVARADO
+    - Comparar valores y número de pasos
+    
+    **Estado:** ✅ Mejorado con estrategias de APP GICA
+    **Versión:** v3.0 - Extracción Mejorada
+    """)
+    
+    st.sidebar.header("🛠️ Estado del Sistema")
+    st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
+    st.sidebar.info(f"✅ Pandas {pd.__version__}")
+    
+    # Cargar archivo Excel
+    st.subheader("📁 Cargar Archivo Excel")
+    uploaded_file = st.file_uploader(
+        "Selecciona el archivo Excel (CrptTransaccionesTotal DD-MM-YYYY gopass)", 
+        type=['xlsx', 'xls']
+    )
+    
+    if uploaded_file is not None:
+        # Extraer fecha del nombre
+        fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
+        
+        if fecha_validacion:
+            st.success(f"📅 Fecha detectada: {fecha_validacion}")
+        else:
+            st.warning("⚠️ No se pudo detectar la fecha")
+            fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+        
+        if fecha_validacion:
+            # Procesar Excel
+            with st.spinner("📊 Procesando archivo Excel..."):
+                valor_excel, pasos_excel = procesar_excel(uploaded_file)
+            
+            if valor_excel > 0 and pasos_excel > 0:
+                # Mostrar valores del Excel
+                st.markdown("### 📊 Valores Extraídos del Excel")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💰 Valor a Pagar", f"${valor_excel:,.0f}")
+                with col2:
+                    st.metric("👣 Número de Pasos", f"{pasos_excel}")
+                
+                st.markdown("---")
+                
+                # Botón para extraer de Power BI
+                if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
+                    with st.spinner("🌐 Extrayendo datos de Power BI..."):
+                        valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
+                    
+                    if valor_power_bi is not None and pasos_power_bi is not None:
+                        # Mostrar resultados de Power BI
+                        st.markdown("### 📊 Valores Extraídos de Power BI")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            st.metric("💰 Valor a Pagar (Power BI)", f"${valor_power_bi:,.0f}")
+                        with col4:
+                            st.metric("👣 Número de Pasos (Power BI)", f"{pasos_power_bi}")
+                        
+                        st.markdown("---")
+                        
+                        # Comparar
+                        st.markdown("### 📊 Resultado de la Validación")
+                        
+                        coinciden_valor, coinciden_pasos, dif_valor, dif_pasos = comparar_valores(
+                            valor_excel, valor_power_bi, pasos_excel, pasos_power_bi
+                        )
+                        
+                        if coinciden_valor and coinciden_pasos:
+                            st.success("🎉 ✅ TODOS LOS VALORES COINCIDEN")
+                            st.balloons()
+                        else:
+                            if not coinciden_valor:
+                                st.error(f"❌ DIFERENCIA EN VALOR: ${dif_valor:,.0f}")
+                            if not coinciden_pasos:
+                                st.error(f"❌ DIFERENCIA EN PASOS: {dif_pasos} pasos")
+                        
+                        # Tabla resumen
+                        st.markdown("### 📋 Resumen de Comparación")
+                        
+                        datos = {
+                            'Concepto': ['Valor a Pagar', 'Número de Pasos'],
+                            'Excel': [f"${valor_excel:,.0f}", f"{pasos_excel}"],
+                            'Power BI': [f"${valor_power_bi:,.0f}", f"{pasos_power_bi}"],
+                            'Resultado': [
+                                '✅ COINCIDE' if coinciden_valor else f'❌ DIFERENCIA: ${dif_valor:,.0f}',
+                                '✅ COINCIDE' if coinciden_pasos else f'❌ DIFERENCIA: {dif_pasos} pasos'
+                            ]
+                        }
+                        
+                        df = pd.DataFrame(datos)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                        
+                        # Screenshots
+                        with st.expander("📸 Ver Capturas del Proceso"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            if os.path.exists("powerbi_inicial.png"):
+                                with col1:
+                                    st.image("powerbi_inicial.png", caption="Vista Inicial", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_despues_seleccion.png"):
+                                with col2:
+                                    st.image("powerbi_despues_seleccion.png", caption="Tras Selección", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_final.png"):
+                                with col3:
+                                    st.image("powerbi_final.png", caption="Vista Final", use_column_width=True)
+                    else:
+                        st.error("❌ No se pudieron extraer los datos de Power BI")
+            else:
+                st.error("❌ No se pudieron extraer los valores del Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+    
+    # Ayuda
+    st.markdown("---")
+    with st.expander("ℹ️ Instrucciones de Uso"):
+        st.markdown("""
+        **Proceso:**
+        1. Cargar archivo Excel con formato `CrptTransaccionesTotal DD-MM-YYYY gopass`
+        2. Detección automática de fecha
+        3. Extracción de valores del Excel (columna AK)
+        4. Conexión con Power BI y selección de fecha
+        5. Extracción de datos de PEAJE ALVARADO
+        6. Comparación y validación
+        
+        **Mejoras v3.0:**
+        - ✅ Estrategias de extracción adaptadas de APP GICA
+        - ✅ Búsqueda múltiple en contenedores
+        - ✅ Identificación inteligente de valores y pasos
+        - ✅ Filtrado por rangos numéricos razonables
+        - ✅ Capturas de pantalla del proceso
+        """)
+
+if __name__ == "__main__":
+    main()
+    
+    st.markdown("---")
+    st.markdown('<div style="text-align: center;">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit | v3.0</div>', unsafe_allow_html=True)
+, '').replace(',', '').replace('.', '')
+                            if ',' in valor_texto and valor_texto.count(',') == 1:
+                                partes = valor_texto.replace('
+
+def extract_powerbi_data(fecha_objetivo):
+    """Función principal para extraer datos de Power BI - MEJORADA"""
+    
+    REPORT_URL = "https://app.powerbi.com/view?r=eyJrIjoiMDA5OGE5MTQtNjQ0MC00ZTdjLWJmNDItNGZhYmQxOWE5ZTk3IiwidCI6ImY5MTdlZDFiLWI0MDMtNDljNS1iODBiLWJhYWUzY2UwMzc1YSJ9"
+    
+    driver = setup_driver()
+    if not driver:
+        return None, None
+    
+    try:
+        # 1. Navegar al reporte
+        with st.spinner("🌐 Conectando con Power BI..."):
+            driver.get(REPORT_URL)
+            time.sleep(10)
+        
+        # 2. Tomar screenshot inicial
+        driver.save_screenshot("powerbi_inicial.png")
+        
+        # 3. Hacer clic en la conciliación específica
+        if not click_conciliacion_date(driver, fecha_objetivo):
+            return None, None
+        
+        # 4. Esperar a que cargue la selección
+        time.sleep(5)
+        driver.save_screenshot("powerbi_despues_seleccion.png")
+        
+        # 5. Buscar datos de PEAJE ALVARADO
+        with st.spinner("🔍 Extrayendo datos de PEAJE ALVARADO..."):
+            valor_power_bi, pasos_power_bi = find_alvarado_card(driver)
+        
+        # 6. Tomar screenshot final
+        driver.save_screenshot("powerbi_final.png")
+        
+        return valor_power_bi, pasos_power_bi
+        
+    except Exception as e:
+        st.error(f"❌ Error durante la extracción: {str(e)}")
+        return None, None
+    finally:
+        driver.quit()
+
+def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
+    """Compara los valores y determina si coinciden"""
+    try:
+        diferencia_valor = abs(valor_excel - valor_power_bi) if valor_power_bi else valor_excel
+        diferencia_pasos = abs(pasos_excel - pasos_power_bi) if pasos_power_bi else pasos_excel
+        
+        coinciden_valor = diferencia_valor < 1.0
+        coinciden_pasos = diferencia_pasos == 0
+        
+        return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
+        
+    except Exception as e:
+        st.error(f"❌ Error comparando valores: {e}")
+        return False, False, 0, 0
+
+# ===== INTERFAZ PRINCIPAL =====
+
+def main():
+    st.title("💰 Validador Power BI - PEAJE ALVARADO")
+    st.markdown("---")
+    
+    # Sidebar
+    st.sidebar.header("📋 Información del Reporte")
+    st.sidebar.info("""
+    **Objetivo:**
+    - Validar conciliaciones entre Excel y Power BI
+    - Extraer datos de PEAJE ALVARADO
+    - Comparar valores y número de pasos
+    
+    **Estado:** ✅ Mejorado con estrategias de APP GICA
+    **Versión:** v3.0 - Extracción Mejorada
+    """)
+    
+    st.sidebar.header("🛠️ Estado del Sistema")
+    st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
+    st.sidebar.info(f"✅ Pandas {pd.__version__}")
+    
+    # Cargar archivo Excel
+    st.subheader("📁 Cargar Archivo Excel")
+    uploaded_file = st.file_uploader(
+        "Selecciona el archivo Excel (CrptTransaccionesTotal DD-MM-YYYY gopass)", 
+        type=['xlsx', 'xls']
+    )
+    
+    if uploaded_file is not None:
+        # Extraer fecha del nombre
+        fecha_validacion = extraer_fecha_desde_nombre(uploaded_file.name)
+        
+        if fecha_validacion:
+            st.success(f"📅 Fecha detectada: {fecha_validacion}")
+        else:
+            st.warning("⚠️ No se pudo detectar la fecha")
+            fecha_validacion = st.text_input("Ingresa la fecha manualmente (YYYY-MM-DD):")
+        
+        if fecha_validacion:
+            # Procesar Excel
+            with st.spinner("📊 Procesando archivo Excel..."):
+                valor_excel, pasos_excel = procesar_excel(uploaded_file)
+            
+            if valor_excel > 0 and pasos_excel > 0:
+                # Mostrar valores del Excel
+                st.markdown("### 📊 Valores Extraídos del Excel")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💰 Valor a Pagar", f"${valor_excel:,.0f}")
+                with col2:
+                    st.metric("👣 Número de Pasos", f"{pasos_excel}")
+                
+                st.markdown("---")
+                
+                # Botón para extraer de Power BI
+                if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
+                    with st.spinner("🌐 Extrayendo datos de Power BI..."):
+                        valor_power_bi, pasos_power_bi = extract_powerbi_data(fecha_validacion)
+                    
+                    if valor_power_bi is not None and pasos_power_bi is not None:
+                        # Mostrar resultados de Power BI
+                        st.markdown("### 📊 Valores Extraídos de Power BI")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            st.metric("💰 Valor a Pagar (Power BI)", f"${valor_power_bi:,.0f}")
+                        with col4:
+                            st.metric("👣 Número de Pasos (Power BI)", f"{pasos_power_bi}")
+                        
+                        st.markdown("---")
+                        
+                        # Comparar
+                        st.markdown("### 📊 Resultado de la Validación")
+                        
+                        coinciden_valor, coinciden_pasos, dif_valor, dif_pasos = comparar_valores(
+                            valor_excel, valor_power_bi, pasos_excel, pasos_power_bi
+                        )
+                        
+                        if coinciden_valor and coinciden_pasos:
+                            st.success("🎉 ✅ TODOS LOS VALORES COINCIDEN")
+                            st.balloons()
+                        else:
+                            if not coinciden_valor:
+                                st.error(f"❌ DIFERENCIA EN VALOR: ${dif_valor:,.0f}")
+                            if not coinciden_pasos:
+                                st.error(f"❌ DIFERENCIA EN PASOS: {dif_pasos} pasos")
+                        
+                        # Tabla resumen
+                        st.markdown("### 📋 Resumen de Comparación")
+                        
+                        datos = {
+                            'Concepto': ['Valor a Pagar', 'Número de Pasos'],
+                            'Excel': [f"${valor_excel:,.0f}", f"{pasos_excel}"],
+                            'Power BI': [f"${valor_power_bi:,.0f}", f"{pasos_power_bi}"],
+                            'Resultado': [
+                                '✅ COINCIDE' if coinciden_valor else f'❌ DIFERENCIA: ${dif_valor:,.0f}',
+                                '✅ COINCIDE' if coinciden_pasos else f'❌ DIFERENCIA: {dif_pasos} pasos'
+                            ]
+                        }
+                        
+                        df = pd.DataFrame(datos)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                        
+                        # Screenshots
+                        with st.expander("📸 Ver Capturas del Proceso"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            if os.path.exists("powerbi_inicial.png"):
+                                with col1:
+                                    st.image("powerbi_inicial.png", caption="Vista Inicial", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_despues_seleccion.png"):
+                                with col2:
+                                    st.image("powerbi_despues_seleccion.png", caption="Tras Selección", use_column_width=True)
+                            
+                            if os.path.exists("powerbi_final.png"):
+                                with col3:
+                                    st.image("powerbi_final.png", caption="Vista Final", use_column_width=True)
+                    else:
+                        st.error("❌ No se pudieron extraer los datos de Power BI")
+            else:
+                st.error("❌ No se pudieron extraer los valores del Excel")
+    else:
+        st.info("📁 Por favor, carga un archivo Excel para comenzar")
+    
+    # Ayuda
+    st.markdown("---")
+    with st.expander("ℹ️ Instrucciones de Uso"):
+        st.markdown("""
+        **Proceso:**
+        1. Cargar archivo Excel con formato `CrptTransaccionesTotal DD-MM-YYYY gopass`
+        2. Detección automática de fecha
+        3. Extracción de valores del Excel (columna AK)
+        4. Conexión con Power BI y selección de fecha
+        5. Extracción de datos de PEAJE ALVARADO
+        6. Comparación y validación
+        
+        **Mejoras v3.0:**
+        - ✅ Estrategias de extracción adaptadas de APP GICA
+        - ✅ Búsqueda múltiple en contenedores
+        - ✅ Identificación inteligente de valores y pasos
+        - ✅ Filtrado por rangos numéricos razonables
+        - ✅ Capturas de pantalla del proceso
+        """)
+
+if __name__ == "__main__":
+    main()
+    
+    st.markdown("---")
+    st.markdown('<div style="text-align: center;">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit | v3.0</div>', unsafe_allow_html=True)
+, '').split(',')
+                                valor_limpio = partes[0].replace('.', '')
+                            
+                            if valor_limpio.isdigit():
+                                valor = int(valor_limpio)
+                    
+                    # Buscar pasos
+                    if not pasos and texto.isdigit():
+                        num_val = int(texto)
+                        if 100 < num_val < 10000:
+                            pasos = num_val
+            
+            if valor and pasos:
+                st.success(f"✅ Estrategia 3: Pasos={pasos}, Valor=${valor:,.0f}")
+                return valor, pasos
+                
         except Exception as e:
             st.warning(f"⚠️ Estrategia 3 falló: {e}")
         
@@ -602,4 +2079,3 @@ if __name__ == "__main__":
     
     st.markdown("---")
     st.markdown('<div style="text-align: center;">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit | v3.0</div>', unsafe_allow_html=True)
-    
