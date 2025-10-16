@@ -1,3 +1,29 @@
+import os
+import sys
+
+# ===== CONFIGURACIÓN CRÍTICA PARA STREAMLIT CLOUD - MEJORADA =====
+os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
+os.environ['STREAMLIT_CI'] = 'true'
+os.environ['STREAMLIT_SERVER_HEADLESS'] = 'true'
+os.environ['STREAMLIT_SERVER_ENABLE_STATIC_SERVING'] = 'true'
+os.environ['STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION'] = 'false'
+
+# Monkey patch para evitar problemas de watcher
+import streamlit.web.bootstrap
+import streamlit.watcher
+
+def no_op_watch(*args, **kwargs):
+    return lambda: None
+
+def no_op_watch_file(*args, **kwargs):
+    return
+
+streamlit.watcher.path_watcher.watch_file = no_op_watch_file
+streamlit.watcher.path_watcher._watch_path = no_op_watch
+streamlit.watcher.event_based_path_watcher.EventBasedPathWatcher.__init__ = lambda *args, **kwargs: None
+streamlit.web.bootstrap._install_config_watchers = lambda *args, **kwargs: None
+
+# ===== IMPORTS NORMALES =====
 import streamlit as st
 import pandas as pd
 import re
@@ -11,45 +37,147 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 import time
 
-# Configuración de la página
+# Configuración adicional para Streamlit
 st.set_page_config(
     page_title="Validador Power BI - Conciliaciones",
     page_icon="💰",
     layout="wide"
 )
 
-# CSS para mejorar la apariencia
+# ===== CSS Sidebar =====
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .success-box {
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        border-radius: 5px;
-        padding: 15px;
-        margin: 10px 0;
-    }
-    .error-box {
-        background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
-        border-radius: 5px;
-        padding: 15px;
-        margin: 10px 0;
-    }
-    .info-box {
-        background-color: #d1ecf1;
-        border: 1px solid #bee5eb;
-        border-radius: 5px;
-        padding: 15px;
-        margin: 10px 0;
-    }
+/* ===== Sidebar ===== */
+[data-testid="stSidebar"] {
+    background-color: #1E1E2F !important;
+    color: white !important;
+    width: 300px !important;
+    padding: 20px 10px 20px 10px !important;
+    border-right: 1px solid #333 !important;
+}
+
+/* Texto general en blanco */
+[data-testid="stSidebar"] h1, 
+[data-testid="stSidebar"] h2, 
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] .stMarkdown p,
+[data-testid="stSidebar"] .stCheckbox label {
+    color: white !important; 
+}
+
+/* SOLO el label del file_uploader en blanco */
+[data-testid="stSidebar"] .stFileUploader > label {
+    color: white !important;
+    font-weight: bold;
+}
+
+/* Mantener en negro el resto del uploader */
+[data-testid="stSidebar"] .stFileUploader .uppy-Dashboard-AddFiles-title,
+[data-testid="stSidebar"] .stFileUploader .uppy-Dashboard-AddFiles-subtitle,
+[data-testid="stSidebar"] .stFileUploader .uppy-Dashboard-AddFiles-list button,
+[data-testid="stSidebar"] .stFileUploader .uppy-Dashboard-Item-name,
+[data-testid="stSidebar"] .stFileUploader .uppy-Dashboard-Item-status,
+[data-testid="stSidebar"] .stFileUploader span,
+[data-testid="stSidebar"] .stFileUploader div {
+    color: black !important;
+}
+
+/* ===== Botón de expandir/cerrar sidebar ===== */
+[data-testid="stSidebarNav"] button {
+    background: #2E2E3E !important;
+    color: white !important;
+    border-radius: 6px !important;
+}
+
+/* ===== Encabezados del sidebar ===== */
+[data-testid="stSidebar"] h1, 
+[data-testid="stSidebar"] h2, 
+[data-testid="stSidebar"] h3 {
+    color: #00CFFF !important;
+}
+
+/* ===== Inputs de texto en el sidebar ===== */
+[data-testid="stSidebar"] input[type="text"],
+[data-testid="stSidebar"] input[type="password"] {
+    color: black !important;
+    background-color: white !important;
+    border-radius: 6px !important;
+    padding: 5px !important;
+}
+
+/* ===== BOTÓN "BROWSE FILES" ===== */
+[data-testid="stSidebar"] .uppy-Dashboard-AddFiles-list button {
+    color: black !important;
+    background-color: #f0f0f0 !important;
+    border: 1px solid #ccc !important;
+}
+[data-testid="stSidebar"] .uppy-Dashboard-AddFiles-list button:hover {
+    background-color: #e0e0e0 !important;
+}
+
+/* ===== Texto en multiselect ===== */
+[data-testid="stSidebar"] .stMultiSelect label,
+[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="select"] {
+    color: white !important;
+}
+[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="tag"] {
+    color: black !important;
+    background-color: #e0e0e0 !important;
+}
+
+/* ===== ICONOS DE AYUDA (?) EN EL SIDEBAR ===== */
+[data-testid="stSidebar"] svg.icon {
+    stroke: white !important;
+    color: white !important;
+    fill: none !important;
+    opacity: 1 !important;
+}
+
+/* ===== MEJORAS PARA STREAMLIT CLOUD ===== */
+.stSpinner > div > div {
+    border-color: #00CFFF !important;
+}
+
+.stProgress > div > div > div > div {
+    background-color: #00CFFF !important;
+}
+
+/* ===== ESTILOS ADICIONALES ===== */
+.success-box {
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 5px;
+    padding: 15px;
+    margin: 10px 0;
+}
+.error-box {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 5px;
+    padding: 15px;
+    margin: 10px 0;
+}
+.info-box {
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    border-radius: 5px;
+    padding: 15px;
+    margin: 10px 0;
+}
 </style>
 """, unsafe_allow_html=True)
+
+# Logo de GoPass con HTML
+st.markdown("""
+<div style="display: flex; justify-content: center; margin-bottom: 30px;">
+    <img src="https://i.imgur.com/z9xt46F.jpeg"
+         style="width: 50%; border-radius: 10px; display: block; margin: 0 auto;" 
+         alt="Logo Gopass">
+</div>
+""", unsafe_allow_html=True)
+
+# ===== FUNCIONES ORIGINALES (EXACTAMENTE IGUALES) =====
 
 def extraer_fecha_desde_nombre(nombre_archivo):
     """
@@ -197,10 +325,32 @@ def comparar_valores(valor_excel, valor_power_bi, pasos_excel, pasos_power_bi):
     
     return coinciden_valor, coinciden_pasos, diferencia_valor, diferencia_pasos
 
+# ===== INTERFAZ PRINCIPAL CON NUEVO DISEÑO =====
+
 def main():
-    st.markdown('<div class="main-header">💰 Validador Power BI - Conciliaciones</div>', unsafe_allow_html=True)
+    st.title("💰 Validador Power BI - Conciliaciones")
+    st.markdown("---")
     
-    # Sidebar para carga de archivo
+    # Información del reporte en sidebar
+    st.sidebar.header("📋 Información del Reporte")
+    st.sidebar.info("""
+    **Objetivo:**
+    - Validar conciliaciones entre Excel y Power BI
+    - Comparar valores y número de pasos
+    - Detectar diferencias automáticamente
+    
+    **Formato archivo:**
+    - CrptTransaccionesTotal DD-MM-YYYY gopass
+    - Columna AK: encabezado "Valor"
+    - Texto: "TOTAL TRANSACCIONES X"
+    """)
+    
+    # Estado del sistema
+    st.sidebar.header("🛠️ Estado del Sistema")
+    st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
+    st.sidebar.info(f"✅ Pandas {pd.__version__}")
+    
+    # Cargar archivo Excel en sidebar
     with st.sidebar:
         st.header("📁 Cargar Archivo Excel")
         uploaded_file = st.file_uploader("Selecciona el archivo Excel", type=['xlsx', 'xls'])
@@ -221,10 +371,13 @@ def main():
     if uploaded_file is not None and fecha_validacion:
         
         # Procesar el archivo Excel
-        with st.spinner("Procesando archivo Excel..."):
+        with st.spinner("📊 Procesando archivo Excel..."):
             valor_a_pagar, numero_pasos = procesar_excel(uploaded_file)
         
         if valor_a_pagar > 0 and numero_pasos > 0:
+            # Mostrar valores extraídos del Excel
+            st.markdown("### 📊 Valores Extraídos del Excel")
+            
             col1, col2 = st.columns(2)
             
             with col1:
@@ -233,13 +386,17 @@ def main():
             with col2:
                 st.metric("👣 Número de Pasos (Excel)", f"{numero_pasos}")
             
+            st.markdown("---")
+            
             # Extraer datos de Power BI
-            if st.button("🔄 Consultar Power BI y Validar", type="primary"):
-                with st.spinner("Extrayendo datos de Power BI..."):
+            if st.button("🎯 Extraer Valores de Power BI y Validar", type="primary", use_container_width=True):
+                with st.spinner("🌐 Extrayendo datos de Power BI..."):
                     valor_power_bi, pasos_power_bi = extraer_datos_power_bi(fecha_validacion)
                 
                 if valor_power_bi is not None and pasos_power_bi is not None:
                     # Mostrar resultados de Power BI
+                    st.markdown("### 📊 Valores Extraídos de Power BI")
+                    
                     col3, col4 = st.columns(2)
                     
                     with col3:
@@ -248,14 +405,16 @@ def main():
                     with col4:
                         st.metric("👣 Número de Pasos (Power BI)", f"{pasos_power_bi}")
                     
-                    # Comparar resultados
                     st.markdown("---")
-                    st.subheader("📊 Resultado de la Validación")
+                    
+                    # Comparar resultados
+                    st.markdown("### 📊 Resultado de la Validación")
                     
                     coinciden_valor, coinciden_pasos, dif_valor, dif_pasos = comparar_valores(
                         valor_a_pagar, valor_power_bi, numero_pasos, pasos_power_bi
                     )
                     
+                    # Mostrar resultado general
                     if coinciden_valor and coinciden_pasos:
                         st.markdown('<div class="success-box">✅ ✅ TODOS LOS VALORES COINCIDEN</div>', unsafe_allow_html=True)
                         st.balloons()
@@ -268,7 +427,7 @@ def main():
                             st.markdown(f'<div class="error-box">❌ DIFERENCIA EN PASOS: {dif_pasos} pasos</div>', unsafe_allow_html=True)
                     
                     # Tabla resumen
-                    st.subheader("📋 Resumen de Comparación")
+                    st.markdown("### 📋 Resumen de Comparación")
                     
                     datos_comparacion = {
                         'Concepto': ['Valor a Pagar', 'Número de Pasos'],
@@ -284,15 +443,30 @@ def main():
                     st.dataframe(df_comparacion, use_container_width=True, hide_index=True)
                     
                 else:
-                    st.error("No se pudieron extraer los datos del Power BI")
+                    st.error("❌ No se pudieron extraer los datos del Power BI")
         else:
-            st.error("No se pudieron extraer los valores del archivo Excel. Verifica el formato.")
+            st.error("❌ No se pudieron extraer los valores del archivo Excel. Verifica el formato.")
+            with st.expander("💡 Sugerencias para solucionar el problema"):
+                st.markdown("""
+                **Problemas comunes:**
+                - El archivo no tiene el formato esperado
+                - No se encuentra "Valor" en la columna AK
+                - No se encuentra "TOTAL TRANSACCIONES X" en el archivo
+                - Los valores no son numéricos
+                
+                **Verifica:**
+                - El nombre del archivo contiene la fecha (DD-MM-YYYY)
+                - La columna AK tiene el encabezado "Valor"
+                - Hay valores numéricos debajo del encabezado "Valor"
+                - Existe el texto "TOTAL TRANSACCIONES" seguido de un número
+                """)
     
-    elif uploaded_file is None:
+    else:
         st.info("👈 Por favor, carga un archivo Excel para comenzar la validación")
-    
-    # Instrucciones de uso
-    with st.expander("📖 Instrucciones de Uso"):
+
+    # Información de ayuda
+    st.markdown("---")
+    with st.expander("ℹ️ Instrucciones de Uso"):
         st.markdown("""
         **Proceso de Validación:**
         
@@ -307,9 +481,19 @@ def main():
         **Requisitos del Archivo:**
         - Formato Excel (.xlsx, .xls)
         - Nombre debe contener la fecha: `CrptTransaccionesTotal DD-MM-YYYY gopass`
-        - Columna AK debe tener encabezado "Valor" en fila 38
+        - Columna AK debe tener encabezado "Valor"
         - Debe contener texto "TOTAL TRANSACCIONES X" donde X es el número de pasos
+        
+        **Notas:**
+        - La conexión a Power BI puede tomar algunos segundos
+        - Las fechas deben coincidir exactamente
+        - Los valores se comparan con tolerancia de 1 centavo
+        - Los pasos deben coincidir exactamente
         """)
 
 if __name__ == "__main__":
     main()
+
+    # Footer
+    st.markdown("---")
+    st.markdown('<div class="footer">💻 Desarrollado por Angel Torres | 🚀 Powered by Streamlit</div>', unsafe_allow_html=True)
