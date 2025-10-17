@@ -488,7 +488,7 @@ def main():
     st.sidebar.info(f"✅ Pandas {pd.__version__}")
     
     st.sidebar.header("💱 Validar otro peaje")
-    st.markdown("""
+    st.sidebar("""
     <div class="ezytec-section">
         <h2 class="sub-header">HONDA</h2>
         <div class="ezytec-card">
