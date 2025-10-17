@@ -140,7 +140,7 @@ st.markdown("""
 
 /* Estilo específico para Armero */
 .armero-btn {
-    background: linear-gradient(135deg, #FF6B6B 0%, #EE5A52 100%);
+    background: linear-gradient(135deg, #00CFFF 0%, #0099CC 100%);
 }
 
 .armero-btn:hover {
@@ -555,10 +555,10 @@ def main():
         <h3>💱 Validar otros peajes</h3>
         <div class="peaje-card">
             <a href="https://validacion-automatica-honda-angeltorres.streamlit.app/" target="_blank">
-                <button class="peaje-btn honda-btn">🧾 Ir a HONDA</button>
+                <button class="peaje-btn honda-btn">🧾 Conciliar Armero</button>
             </a>
             <a href="https://armero-validacion-automatica-angeltorres.streamlit.app/" target="_blank">
-                <button class="peaje-btn armero-btn">🛣️ Conciliar Armero</button>
+                <button class="peaje-btn armero-btn">🧾 Conciliar Armero</button>
             </a>
         </div>
     </div>
