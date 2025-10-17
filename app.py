@@ -95,6 +95,45 @@ st.markdown("""
 .stProgress > div > div > div > div {
     background-color: #00CFFF !important;
 }
+
+/* Estilos para el botón de Honda */
+.honda-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: linear-gradient(135deg, #2D3047 0%, #1E1E2F 100%);
+    border-radius: 10px;
+    border: 1px solid #444;
+}
+
+.honda-section h3 {
+    color: #00CFFF !important;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+.honda-card {
+    text-align: center;
+}
+
+.honda-btn {
+    background: linear-gradient(135deg, #00CFFF 0%, #0099CC 100%);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+    text-decoration: none;
+    display: block;
+}
+
+.honda-btn:hover {
+    background: linear-gradient(135deg, #0099CC 0%, #0077AA 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 207, 255, 0.3);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -487,20 +526,17 @@ def main():
     st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
     st.sidebar.info(f"✅ Pandas {pd.__version__}")
     
-    st.sidebar.header("💱 Validar otro peaje")
-    st.sidebar.info("""
-    <div class="ezytec-section">
-        <h2 class="sub-header">HONDA</h2>
-        <div class="ezytec-card">
+    # Sección Honda - CORREGIDA
+    st.sidebar.markdown("""
+    <div class="honda-section">
+        <h3>💱 Validar otro peaje</h3>
+        <div class="honda-card">
             <a href="https://validacion-automatica-honda-angeltorres.streamlit.app/" target="_blank">
-                <button class="direct-access-btn ezytec-btn">🧾 ir a HONDA</button>
+                <button class="honda-btn">🧾 Ir a HONDA</button>
             </a>
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-
-
     
     # Cargar archivo Excel
     st.subheader("📁 Cargar Archivo Excel")
