@@ -487,6 +487,21 @@ def main():
     st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
     st.sidebar.info(f"✅ Pandas {pd.__version__}")
     
+    st.sidebar.header("💱 Validar otro peaje")
+    st.markdown("""
+    <div class="ezytec-section">
+        <h2 class="sub-header">HONDA</h2>
+        <div class="ezytec-card">
+            <a href="https://validacion-automatica-honda-angeltorres.streamlit.app/" target="_blank">
+                <button class="direct-access-btn ezytec-btn">🧾 ir a HONDA</button>
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+
+    
     # Cargar archivo Excel
     st.subheader("📁 Cargar Archivo Excel")
     uploaded_file = st.file_uploader(
