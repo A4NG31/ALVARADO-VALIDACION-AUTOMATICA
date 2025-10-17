@@ -96,8 +96,8 @@ st.markdown("""
     background-color: #00CFFF !important;
 }
 
-/* Estilos para el botón de Honda */
-.honda-section {
+/* Estilos para los botones de peajes */
+.peajes-section {
     margin-top: 20px;
     padding: 15px;
     background: linear-gradient(135deg, #2D3047 0%, #1E1E2F 100%);
@@ -105,17 +105,19 @@ st.markdown("""
     border: 1px solid #444;
 }
 
-.honda-section h3 {
+.peajes-section h3 {
     color: #00CFFF !important;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
     font-size: 1.1em;
-}
-
-.honda-card {
     text-align: center;
 }
 
-.honda-btn {
+.peaje-card {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.peaje-btn {
     background: linear-gradient(135deg, #00CFFF 0%, #0099CC 100%);
     color: white;
     border: none;
@@ -127,11 +129,32 @@ st.markdown("""
     width: 100%;
     text-decoration: none;
     display: block;
+    margin-bottom: 8px;
+}
+
+.peaje-btn:hover {
+    background: linear-gradient(135deg, #0099CC 0%, #0077AA 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 207, 255, 0.3);
+}
+
+/* Estilo específico para Armero */
+.armero-btn {
+    background: linear-gradient(135deg, #FF6B6B 0%, #EE5A52 100%);
+}
+
+.armero-btn:hover {
+    background: linear-gradient(135deg, #EE5A52 0%, #D64541 100%);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+}
+
+/* Estilo específico para Honda */
+.honda-btn {
+    background: linear-gradient(135deg, #00CFFF 0%, #0099CC 100%);
 }
 
 .honda-btn:hover {
     background: linear-gradient(135deg, #0099CC 0%, #0077AA 100%);
-    transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 207, 255, 0.3);
 }
 </style>
@@ -526,13 +549,16 @@ def main():
     st.sidebar.success(f"✅ Python {sys.version_info.major}.{sys.version_info.minor}")
     st.sidebar.info(f"✅ Pandas {pd.__version__}")
     
-    # Sección Honda - CORREGIDA
+    # Sección de Peajes - CON BOTONES PARA HONDA Y ARMERO
     st.sidebar.markdown("""
-    <div class="honda-section">
-        <h3>💱 Validar otro peaje</h3>
-        <div class="honda-card">
+    <div class="peajes-section">
+        <h3>💱 Validar otros peajes</h3>
+        <div class="peaje-card">
             <a href="https://validacion-automatica-honda-angeltorres.streamlit.app/" target="_blank">
-                <button class="honda-btn">🧾 Ir a HONDA</button>
+                <button class="peaje-btn honda-btn">🧾 Ir a HONDA</button>
+            </a>
+            <a href="https://armero-validacion-automatica-angeltorres.streamlit.app/" target="_blank">
+                <button class="peaje-btn armero-btn">🛣️ Conciliar Armero</button>
             </a>
         </div>
     </div>
